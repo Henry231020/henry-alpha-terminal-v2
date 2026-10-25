@@ -35,3 +35,18 @@ test('invalid observation kind is rejected', async () => {
   await store.initialize();
   assert.equal(await store.save('mint', 'anything', Date.now(), {}), false);
 });
+
+test('discovers persisted mints with a bounded parameterized query', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.startsWith('SELECT DISTINCT mint')) return { rows: [{ mint: 'mint-a' }, { mint: '' }, { mint: 'mint-b' }] };
+    return { rows: [] };
+  } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  assert.deepEqual(await store.mints(99999), ['mint-a', 'mint-b']);
+  const query = calls.find(item => item.sql.startsWith('SELECT DISTINCT mint'));
+  assert.equal(query.args[0], 2000);
+  assert.match(query.sql, /\$1/);
+});
