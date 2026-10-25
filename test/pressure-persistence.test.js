@@ -59,3 +59,20 @@ test('discovers persisted mints with a bounded parameterized query', async () =>
   assert.equal(query.args[0], 2000);
   assert.match(query.sql, /\$1/);
 });
+
+test('queries only saved alerts and clamps alert history limit', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.includes("kind = 'alert'")) return { rows: [{ kind: 'alert', payload: { signal: 'URGENT DUMP PRESSURE' } }] };
+    return { rows: [] };
+  } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  const alerts = await store.recentAlerts('mint-a', 99999);
+  assert.equal(alerts.length, 1);
+  const query = calls.find(item => item.sql.includes("kind = 'alert'"));
+  assert.match(query.sql, /WHERE mint = \$1 AND kind = 'alert'/);
+  assert.equal(query.args[0], 'mint-a');
+  assert.equal(query.args[1], 100);
+});
