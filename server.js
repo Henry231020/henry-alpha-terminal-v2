@@ -1,194 +1,282 @@
-require("dotenv").config();
+require('dotenv').config();
 
-const http = require("http");
-const path = require("path");
-const fs = require("fs");
-const WebSocket = require("ws");
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 3000);
-const HOST = "0.0.0.0";
-const PUMP_URL = "wss://pumpportal.fun/api/data";
+const HOST = '0.0.0.0';
+const PUMP_URL = 'wss://pumpportal.fun/api/data';
+const MAX_TOKENS = Number(process.env.MAX_TOKENS || 500);
+const MAX_EVENTS = Number(process.env.MAX_EVENTS || 500);
+const DEX_REFRESH_MS = Math.max(15000, Number(process.env.DEX_REFRESH_MS || 30000));
 
 const startedAt = new Date().toISOString();
+const tokens = new Map();
 const recentEvents = [];
-const MAX_EVENTS = 100;
 const clients = new Set();
 
 let pumpSocket = null;
-let pumpStatus = "connecting";
+let pumpStatus = 'connecting';
 let reconnectTimer = null;
 let reconnectDelay = 2000;
 let totalEvents = 0;
+let lastDexRefresh = null;
+let dexErrors = 0;
+let refreshInProgress = false;
 
-const server = http.createServer((req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+function sendJson(res, status, value) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(value));
+}
 
-  if (req.url === "/health") {
-    res.writeHead(200, {
-      "Content-Type": "application/json"
-    });
+function safeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
-    return res.end(JSON.stringify({
-      ok: true,
-      app: "HENRY ALPHA TERMINAL V2",
-      mode: "provider-comparison-prototype",
-      startedAt
-    }));
-  }
+function normalizeToken(mint, data = {}) {
+  const prior = tokens.get(mint) || {};
 
-  if (req.url === "/status") {
-    res.writeHead(200, {
-      "Content-Type": "application/json"
-    });
+  return {
+    mint,
+    name: data.name || prior.name || 'Unknown token',
+    symbol: data.symbol || prior.symbol || '',
+    uri: data.uri || prior.uri || null,
+    image: data.image || prior.image || null,
+    txType: data.txType || prior.txType || 'discovered',
+    firstSeenAt: prior.firstSeenAt || new Date().toISOString(),
+    lastEventAt: data.receivedAt || prior.lastEventAt || new Date().toISOString(),
+    marketCapSol: safeNumber(data.marketCapSol) ?? prior.marketCapSol ?? null,
+    priceUsd: prior.priceUsd ?? null,
+    marketCapUsd: prior.marketCapUsd ?? null,
+    liquidityUsd: prior.liquidityUsd ?? null,
+    volume24h: prior.volume24h ?? null,
+    txns24h: prior.txns24h ?? null,
+    buys24h: prior.buys24h ?? null,
+    sells24h: prior.sells24h ?? null,
+    priceChange24h: prior.priceChange24h ?? null,
+    pairAddress: prior.pairAddress || null,
+    dexId: prior.dexId || null,
+    dexUrl: prior.dexUrl || null,
+    poolCreatedAt: prior.poolCreatedAt || null,
+    traderPublicKey: data.traderPublicKey || prior.traderPublicKey || null,
+    pool: data.pool || prior.pool || null,
+    latestEventData: data,
+    updatedAt: new Date().toISOString()
+  };
+}
 
-    return res.end(JSON.stringify({
-      ok: true,
-      pumpPortal: pumpStatus,
-      totalEvents,
-      recentEvents: recentEvents.length,
-      automaticTrading: false
-    }));
-  }
+function upsertFromEvent(event) {
+  const data = event && event.data ? event.data : event;
 
-  if (req.url === "/events") {
-    res.writeHead(200, {
-      "Content-Type": "application/json"
-    });
+  if (!data || typeof data.mint !== 'string') return null;
 
-    return res.end(JSON.stringify(recentEvents));
-  }
-
-  const file = path.join(
-    __dirname,
-    "public",
-    "index.html"
-  );
-
-  if (!fs.existsSync(file)) {
-    res.writeHead(503);
-    return res.end("Dashboard file not found.");
-  }
-
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8"
+  const token = normalizeToken(data.mint, {
+    ...data,
+    receivedAt: event.receivedAt || new Date().toISOString()
   });
 
-  fs.createReadStream(file).pipe(res);
-});
+  tokens.delete(data.mint);
+  tokens.set(data.mint, token);
 
-const wss = new WebSocket.Server({
-  server,
-  path: "/ws"
-});
+  while (tokens.size > MAX_TOKENS) {
+    tokens.delete(tokens.keys().next().value);
+  }
 
-wss.on("connection", (socket) => {
-  clients.add(socket);
-
-  socket.send(JSON.stringify({
-    type: "status",
-    provider: "PumpPortal",
-    status: pumpStatus,
-    time: new Date().toISOString()
-  }));
-
-  socket.on("close", () => {
-    clients.delete(socket);
-  });
-});
+  return token;
+}
 
 function broadcast(data) {
   const message = JSON.stringify(data);
 
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      try {
+        client.send(message);
+      } catch (_) {}
     }
   }
 }
 
-function connectPumpPortal() {
-  if (pumpSocket) {
-    pumpSocket.removeAllListeners();
-    pumpSocket.terminate();
+function addEvent(payload) {
+  totalEvents++;
+
+  const event = {
+    provider: 'PumpPortal',
+    receivedAt: new Date().toISOString(),
+    data: payload
+  };
+
+  recentEvents.unshift(event);
+
+  if (recentEvents.length > MAX_EVENTS) {
+    recentEvents.pop();
   }
 
+  const token = upsertFromEvent(event);
+
+  broadcast({
+    type: 'provider-event',
+    ...event,
+    token
+  });
+}
+
+async function fetchDexPairs(mint) {
+  const response = await fetch(
+    `https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`,
+    {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`DexScreener HTTP ${response.status}`);
+  }
+
+  const pairs = await response.json();
+
+  if (!Array.isArray(pairs) || !pairs.length) return null;
+
+  pairs.sort((a, b) =>
+    (Number(b?.liquidity?.usd) || 0) -
+    (Number(a?.liquidity?.usd) || 0)
+  );
+
+  const pair = pairs[0];
+
+  return {
+    priceUsd: safeNumber(pair.priceUsd),
+    marketCapUsd: safeNumber(pair.marketCap) ?? safeNumber(pair.fdv),
+    liquidityUsd: safeNumber(pair.liquidity?.usd),
+    volume24h: safeNumber(pair.volume?.h24),
+    txns24h:
+      (safeNumber(pair.txns?.h24?.buys) || 0) +
+      (safeNumber(pair.txns?.h24?.sells) || 0),
+    buys24h: safeNumber(pair.txns?.h24?.buys),
+    sells24h: safeNumber(pair.txns?.h24?.sells),
+    priceChange24h: safeNumber(pair.priceChange?.h24),
+    image: pair.info?.imageUrl || null,
+    pairAddress: pair.pairAddress || null,
+    dexId: pair.dexId || null,
+    dexUrl: pair.url || `https://dexscreener.com/solana/${mint}`,
+    poolCreatedAt: pair.pairCreatedAt || null,
+    baseName: pair.baseToken?.name || null,
+    baseSymbol: pair.baseToken?.symbol || null,
+    source: 'DexScreener',
+    checkedAt: new Date().toISOString()
+  };
+}
+
+async function refreshOneToken(mint) {
+  try {
+    const market = await fetchDexPairs(mint);
+    const prior = tokens.get(mint);
+
+    if (!prior || !market) return;
+
+    const merged = {
+      ...prior,
+      ...market,
+      name: market.baseName || prior.name,
+      symbol: market.baseSymbol || prior.symbol,
+      updatedAt: new Date().toISOString()
+    };
+
+    tokens.set(mint, merged);
+    broadcast({ type: 'market-update', token: merged });
+  } catch (error) {
+    dexErrors++;
+
+    if (dexErrors < 5 || dexErrors % 25 === 0) {
+      console.error('DexScreener refresh failed:', error.message);
+    }
+  }
+}
+
+async function refreshMarketData() {
+  if (refreshInProgress) return;
+
+  refreshInProgress = true;
+
+  try {
+    const list = [...tokens.keys()].slice(0, 20);
+
+    for (const mint of list) {
+      await refreshOneToken(mint);
+      await new Promise(resolve => setTimeout(resolve, 350));
+    }
+
+    lastDexRefresh = new Date().toISOString();
+  } finally {
+    refreshInProgress = false;
+  }
+}
+
+function connectPumpPortal() {
   clearTimeout(reconnectTimer);
-  pumpStatus = "connecting";
-  console.log("Connecting to PumpPortal...");
+  pumpStatus = 'connecting';
+
+  broadcast({
+    type: 'status',
+    provider: 'PumpPortal',
+    status: pumpStatus,
+    time: new Date().toISOString()
+  });
+
+  console.log('Connecting to PumpPortal...');
 
   const socket = new WebSocket(PUMP_URL);
   pumpSocket = socket;
 
-  socket.on("open", () => {
-    pumpStatus = "connected";
-    reconnectDelay = 2000;
-
-    console.log("PumpPortal connected");
-
-    socket.send(JSON.stringify({
-      method: "subscribeNewToken"
-    }));
-
-    socket.send(JSON.stringify({
-      method: "subscribeMigration"
-    }));
-
-    broadcast({
-      type: "status",
-      provider: "PumpPortal",
-      status: pumpStatus,
-      time: new Date().toISOString()
-    });
-  });
-
-  socket.on("message", (raw) => {
-    let payload;
-
-    try {
-      payload = JSON.parse(raw.toString());
-    } catch {
-      console.log("Received a non-JSON provider message");
-      return;
-    }
-
-    totalEvents++;
-
-    const event = {
-      provider: "PumpPortal",
-      receivedAt: new Date().toISOString(),
-      data: payload
-    };
-
-    recentEvents.unshift(event);
-
-    if (recentEvents.length > MAX_EVENTS) {
-      recentEvents.pop();
-    }
-
-    console.log("PumpPortal event received:", totalEvents);
-    broadcast({
-      type: "provider-event",
-      ...event
-    });
-  });
-
-  socket.on("error", (error) => {
-    console.error("PumpPortal connection error:", error.message);
-  });
-
-  socket.on("close", () => {
+  socket.on('open', () => {
     if (pumpSocket !== socket) return;
 
-    pumpStatus = "disconnected";
+    pumpStatus = 'connected';
+    reconnectDelay = 2000;
+
+    socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
+    socket.send(JSON.stringify({ method: 'subscribeMigration' }));
+
+    console.log('PumpPortal connected; subscribed to launches and migrations');
 
     broadcast({
-      type: "status",
-      provider: "PumpPortal",
+      type: 'status',
+      provider: 'PumpPortal',
       status: pumpStatus,
       time: new Date().toISOString()
     });
+  });
 
-    console.log("PumpPortal disconnected. Reconnecting soon.");
+  socket.on('message', raw => {
+    try {
+      addEvent(JSON.parse(raw.toString()));
+    } catch (_) {
+      console.error('Ignored invalid PumpPortal message');
+    }
+  });
+
+  socket.on('error', error => {
+    console.error('PumpPortal connection error:', error.message);
+  });
+
+  socket.on('close', () => {
+    if (pumpSocket !== socket) return;
+
+    pumpStatus = 'disconnected';
+
+    broadcast({
+      type: 'status',
+      provider: 'PumpPortal',
+      status: pumpStatus,
+      time: new Date().toISOString()
+    });
 
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);
@@ -197,7 +285,194 @@ function connectPumpPortal() {
   });
 }
 
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const url = new URL(
+    req.url,
+    `http://${req.headers.host || 'localhost'}`
+  );
+
+  if (req.method !== 'GET') {
+    return sendJson(res, 405, { ok: false, error: 'GET only' });
+  }
+
+  if (url.pathname === '/health' || url.pathname === '/api/health') {
+    return sendJson(res, 200, {
+      ok: true,
+      app: 'HENRY ALPHA TERMINAL V2',
+      version: '2.0.0-section-1',
+      startedAt,
+      automaticTrading: false
+    });
+  }
+
+  if (url.pathname === '/status' || url.pathname === '/api/status') {
+    return sendJson(res, 200, {
+      ok: true,
+      pumpPortal: pumpStatus,
+      totalEvents,
+      tokensTracked: tokens.size,
+      recentEvents: recentEvents.length,
+      dexScreener: 'market lookups enabled',
+      lastDexRefresh,
+      dexErrors,
+      automaticTrading: false,
+      persistence: 'in-memory only; database integration still required'
+    });
+  }
+
+  if (url.pathname === '/events' || url.pathname === '/api/events') {
+    return sendJson(res, 200, recentEvents);
+  }
+
+  if (url.pathname === '/api/tokens') {
+    const query = (url.searchParams.get('q') || '').toLowerCase();
+    const sort = url.searchParams.get('sort') || 'newest';
+    const limit = Math.min(
+      200,
+      Math.max(1, Number(url.searchParams.get('limit') || 100))
+    );
+
+    let list = [...tokens.values()].filter(token =>
+      !query ||
+      [token.name, token.symbol, token.mint].some(value =>
+        String(value || '').toLowerCase().includes(query)
+      )
+    );
+
+    if (sort === 'liquidity') {
+      list.sort((a, b) => (b.liquidityUsd || 0) - (a.liquidityUsd || 0));
+    } else if (sort === 'volume') {
+      list.sort((a, b) => (b.volume24h || 0) - (a.volume24h || 0));
+    } else if (sort === 'marketcap') {
+      list.sort((a, b) => (b.marketCapUsd || 0) - (a.marketCapUsd || 0));
+    } else {
+      list.sort((a, b) =>
+        Date.parse(b.lastEventAt || 0) - Date.parse(a.lastEventAt || 0)
+      );
+    }
+
+    return sendJson(res, 200, {
+      count: list.length,
+      tokens: list.slice(0, limit)
+    });
+  }
+
+  const match = url.pathname.match(/^\/api\/token\/([^/]+)$/);
+
+  if (match) {
+    const mint = decodeURIComponent(match[1]);
+    const token = tokens.get(mint);
+
+    if (!token) {
+      return sendJson(res, 404, {
+        ok: false,
+        error: 'Token has not been discovered by this service yet.',
+        mint
+      });
+    }
+
+    try {
+      const market = await fetchDexPairs(mint);
+
+      if (market) {
+        const merged = {
+          ...token,
+          ...market,
+          name: market.baseName || token.name,
+          symbol: market.baseSymbol || token.symbol,
+          updatedAt: new Date().toISOString()
+        };
+
+        tokens.set(mint, merged);
+
+        return sendJson(res, 200, {
+          token: merged,
+          recentEvents: recentEvents.filter(event =>
+            event.data?.mint === mint
+          ).slice(0, 50),
+          dataNotes: {
+            market: 'Latest DexScreener pair snapshot',
+            history: 'Historical candles require stored observations or a separate history provider.',
+            trades: 'This section collects launch and migration events, not full live trade history.'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Token market lookup failed:', error.message);
+    }
+
+    return sendJson(res, 200, {
+      token,
+      recentEvents: recentEvents.filter(event =>
+        event.data?.mint === mint
+      ).slice(0, 50),
+      dataNotes: {
+        market: 'No DexScreener pair found yet',
+        history: 'Historical candles are not available from this endpoint.',
+        trades: 'This section collects launch and migration events only.'
+      }
+    });
+  }
+
+  if (url.pathname === '/api/market') {
+    const mint = url.searchParams.get('mint');
+
+    if (!mint) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: 'mint query parameter required'
+      });
+    }
+
+    try {
+      return sendJson(res, 200, {
+        mint,
+        market: await fetchDexPairs(mint)
+      });
+    } catch (error) {
+      return sendJson(res, 502, {
+        ok: false,
+        error: 'Market provider unavailable',
+        message: error.message
+      });
+    }
+  }
+
+  const file = path.join(__dirname, 'public', 'index.html');
+
+  if (!fs.existsSync(file)) {
+    res.writeHead(503);
+    return res.end('Dashboard file not found.');
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+
+  fs.createReadStream(file).pipe(res);
+});
+
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+wss.on('connection', socket => {
+  clients.add(socket);
+
+  socket.send(JSON.stringify({
+    type: 'status',
+    provider: 'PumpPortal',
+    status: pumpStatus,
+    time: new Date().toISOString()
+  }));
+
+  socket.on('close', () => clients.delete(socket));
+  socket.on('error', () => clients.delete(socket));
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`HENRY ALPHA TERMINAL V2 listening on ${PORT}`);
   connectPumpPortal();
+  setInterval(refreshMarketData, DEX_REFRESH_MS);
 });
