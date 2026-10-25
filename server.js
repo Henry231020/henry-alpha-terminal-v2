@@ -142,16 +142,18 @@ function addEvent(payload) {
 async function getSolUsdPrice() {
   if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return solUsdPrice;
   if (solUsdRequest) return solUsdRequest;
-  solUsdRequest = (async () => { try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-    const body = await response.json();
-    const price = safeNumber(body?.solana?.usd);
-    if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); }
-    return price;
-  } catch (_) { return null; }
+  solUsdRequest = (async () => {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+      const body = await response.json();
+      const price = safeNumber(body?.solana?.usd);
+      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); }
+      return price;
+    } catch (_) { return null; }
+  })();
+  try { return await solUsdRequest; } finally { solUsdRequest = null; }
 }
-
 function subscribeMintTrades(mint) {
   if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
 }
