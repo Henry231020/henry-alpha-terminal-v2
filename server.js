@@ -8,7 +8,9 @@ const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
 const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const { createHeliusRiskClient } = require('./lib/helius-risk');
+const { createPressurePersistence } = require('./lib/pressure-persistence');
 const heliusRisk = createHeliusRiskClient();
+const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
 let tradeSubscriptions = null;
@@ -169,8 +171,10 @@ function processTradeMessage(data) {
     if (!price) return;
     const side = String(data.txType).toLowerCase();
     const usdValue = solAmount * price;
-    const accepted = pressureStore.recordTrade(data.mint, { side, timestamp: now, usdValue, wallet: data.traderPublicKey || null });
+    const trade = { side, timestamp: now, usdValue, wallet: data.traderPublicKey || null };
+    const accepted = pressureStore.recordTrade(data.mint, trade);
     if (!accepted) return;
+    persistence.save(data.mint, 'trade', now, trade).catch(() => {});
     const analysis = pressureStore.analyse(data.mint);
     const previous = alertedPressure.get(data.mint);
     if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
@@ -252,7 +256,9 @@ async function refreshOneToken(mint) {
 
     tokens.set(mint, merged);
     if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
-      pressureStore.recordSnapshot(mint, { timestamp: Date.now(), priceUsd: merged.priceUsd });
+      const snapshot = { timestamp: Date.now(), priceUsd: merged.priceUsd };
+      pressureStore.recordSnapshot(mint, snapshot);
+      persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
     pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
     broadcast({ type: 'market-update', token: merged });
@@ -396,11 +402,12 @@ const server = http.createServer(async (req, res) => {
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
+      persistence: persistence.status(),
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
       solUsdPrice,
       pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
-      persistence: 'in-memory only; database integration still required'
+      persistenceMode: persistence.status().mode
     });
   }
 
@@ -414,6 +421,7 @@ const server = http.createServer(async (req, res) => {
         holderConcentrationPct: risk.top10ConcentrationPct,
         walletRisk: 'unknown'
       });
+      persistence.save(mint, 'risk', Date.now(), risk).catch(() => {});
     }
     return sendJson(res, 200, { mint, risk, automaticTrading: false });
   }
@@ -498,7 +506,9 @@ const server = http.createServer(async (req, res) => {
 
         tokens.set(mint, merged);
         if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
-          pressureStore.recordSnapshot(mint, { timestamp: Date.now(), priceUsd: merged.priceUsd });
+          const snapshot = { timestamp: Date.now(), priceUsd: merged.priceUsd };
+          pressureStore.recordSnapshot(mint, snapshot);
+          persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
         }
         pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
 
@@ -588,6 +598,7 @@ wss.on('connection', socket => {
 
 server.listen(PORT, HOST, () => {
   console.log(`HENRY ALPHA TERMINAL V2 listening on ${PORT}`);
+  persistence.initialize().then(result => console.log('Pressure persistence:', result));
   connectPumpPortal();
   setInterval(refreshMarketData, DEX_REFRESH_MS);
 });
