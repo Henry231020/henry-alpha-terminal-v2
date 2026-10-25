@@ -39,3 +39,17 @@ test('empty or invalid risk updates reset measurements to unknown', () => {
   assert.match(result.reasons.join(' '), /Holder concentration missing/);
   assert.notEqual(result.signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
 });
+
+test('liquidity refresh preserves independently verified holder risk', () => {
+  const store = new PressureStore();
+  store.setRisk('mint', { liquidityUsd: 20000, holderConcentrationPct: 12, walletRisk: 'low' });
+  store.updateLiquidity('mint', 25000);
+  const state = store.ensure('mint');
+  assert.equal(state.risk.liquidityUsd, 25000);
+  assert.equal(state.risk.holderConcentrationPct, 12);
+  assert.equal(state.risk.walletRisk, 'low');
+  store.updateLiquidity('mint', null);
+  assert.equal(state.risk.liquidityUsd, null);
+  assert.equal(state.risk.holderConcentrationPct, 12);
+  assert.equal(state.risk.walletRisk, 'low');
+});
