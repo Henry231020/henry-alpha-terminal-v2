@@ -7,9 +7,12 @@
     "start": "node server.js",
     "test": "node --test"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "pg": "^8.16.3"
   }
 }
