@@ -13,4 +13,6 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Check JavaScript syntax
+        run: find . -path './node_modules' -prune -o -name '*.js' -type f -print0 | xargs -0 -n1 node --check
       - run: npm test
