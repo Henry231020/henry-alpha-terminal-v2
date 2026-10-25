@@ -26,8 +26,8 @@ test('fails closed when holder account page is incomplete', async () => {
     fetchImpl: async (_url, options) => {
       const body = JSON.parse(options.body);
       assert.equal(body.method, 'getTokenAccounts');
-      assert.equal(body.params.page, 1);
-      return { ok: true, json: async () => ({ result: { token_accounts: [{ owner: 'wallet-a', amount: '90' }, { owner: 'wallet-b', amount: '5' }, { owner: 'wallet-c', amount: '5' }] } }) };
+      assert.ok(body.params.page === 1 || body.params.page === 2);
+      return { ok: true, json: async () => ({ result: { token_accounts: body.params.page === 1 ? [{ owner: 'wallet-a', amount: '90' }, { owner: 'wallet-b', amount: '5' }, { owner: 'wallet-c', amount: '5' }] : [] } }) };
     }
   });
   const result = await client.getHolderRisk('So11111111111111111111111111111111111111112');
