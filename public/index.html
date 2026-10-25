@@ -36,7 +36,7 @@ th{font-size:11px;color:var(--muted);font-weight:600}
 tbody tr{cursor:pointer}
 tbody tr:hover,tbody tr.selected{background:#1b2940}
 .token{display:flex;gap:10px;align-items:center;max-width:240px}
-.token img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#26354a}
+.token img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#26354a;position:relative}.token-avatar{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;background:linear-gradient(135deg,#29476b,#523f79);color:#e8eef8;font-size:10px;font-weight:800;letter-spacing:.3px}
 .token-name{font-weight:650;max-width:175px;overflow:hidden;text-overflow:ellipsis}
 .muted{color:var(--muted);font-size:12px}
 .green{color:var(--green)}.red{color:var(--red)}.gold{color:var(--gold)}
@@ -173,7 +173,8 @@ function renderTokens(){
     const change=Number(t.priceChange24h);
     const changeText=t.priceChange24h==null?'—':(change>0?'+':'')+change.toFixed(2)+'%';
     const changeClass=t.priceChange24h==null?'':change>=0?'green':'red';
-    const img=t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">';
+    const initials=escapeHtml(String(t.symbol||t.name||'?').slice(0,2).toUpperCase());
+    const img='<span class="token-avatar">'+initials+'</span>'+(t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'');
     return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
       '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
       '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
