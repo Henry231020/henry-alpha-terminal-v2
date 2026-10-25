@@ -598,7 +598,27 @@ wss.on('connection', socket => {
 
 server.listen(PORT, HOST, () => {
   console.log(`HENRY ALPHA TERMINAL V2 listening on ${PORT}`);
-  persistence.initialize().then(result => console.log('Pressure persistence:', result));
+  persistence.initialize().then(async result => {
+    console.log('Pressure persistence:', result);
+    if (!result || !result.ready || typeof persistence.mints !== 'function') return;
+    try {
+      const mints = await persistence.mints(500);
+      let restored = 0;
+      for (const mint of mints) {
+        const rows = await persistence.recent(mint, 1000);
+        // Query is newest-first; replay oldest-first so bounded in-memory windows
+        // retain the most recent observations in their original order.
+        rows.reverse();
+        for (const row of rows) {
+          const observedAt = row.observed_at;
+          if (pressureStore.restoreObservation(mint, row.kind, observedAt, row.payload)) restored++;
+        }
+      }
+      console.log('Pressure persistence recovery:', { mints: mints.length, restored });
+    } catch (error) {
+      console.error('Pressure persistence recovery failed; continuing in memory mode:', error.message);
+    }
+  }).catch(error => console.error('Pressure persistence initialization failed:', error.message));
   connectPumpPortal();
   setInterval(refreshMarketData, DEX_REFRESH_MS);
 });
