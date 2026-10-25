@@ -3,247 +3,276 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HENRY ALPHA TERMINAL V2</title>
 <style>
+:root{color-scheme:dark;--bg:#080d16;--panel:#111a29;--line:#24334a;--text:#e8eef8;--muted:#91a2bb;--green:#32d583;--red:#ff647c;--blue:#72a7ff;--gold:#f5c76a}
 *{box-sizing:border-box}
-body{margin:0;background:#080d16;color:#e5edf7;font:14px Arial,sans-serif}
-header{padding:20px;background:#101a2a;border-bottom:1px solid #26364d}
-h1{font-size:21px;margin:0}
-.sub,.muted{color:#91a4bd;font-size:12px}
-.sub{margin-top:8px}
-main{max-width:1300px;margin:auto;padding:18px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-.card{background:#111b2b;border:1px solid #26364d;border-radius:10px;padding:16px;min-width:0}
-.label{color:#91a4bd;font-size:12px}
-.value{font-size:19px;font-weight:bold;margin-top:9px}
-.green{color:#4ade80}.red{color:#f87171}.yellow{color:#fbbf24}
-.section{margin-top:20px}
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
-input,button{background:#101a2a;color:#e5edf7;border:1px solid #34465f;border-radius:7px;padding:10px}
-input{flex:1;min-width:170px}
+body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 24px;border-bottom:1px solid var(--line);background:#0c1422;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:21px;letter-spacing:1px;margin:0}
+.subtitle{color:var(--muted);margin-top:5px;font-size:12px}
+.status{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--gold);display:inline-block}
+main{max-width:1500px;margin:auto;padding:20px}
+.notice{border:1px solid #55472b;background:#211c12;color:#f5d99a;padding:12px 14px;border-radius:10px;margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.card{padding:16px}
+.label{color:var(--muted);font-size:12px}
+.value{font-size:23px;font-weight:700;margin-top:8px;overflow-wrap:anywhere}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+input,select,button{background:#0b1320;border:1px solid var(--line);border-radius:8px;padding:11px;color:var(--text);font:inherit}
+input{flex:1;min-width:200px}
 button{cursor:pointer}
-button:hover{border-color:#60a5fa}
-.tablewrap{overflow-x:auto;border:1px solid #26364d;border-radius:10px}
-table{border-collapse:collapse;width:100%;min-width:760px;background:#111b2b}
-th,td{text-align:left;padding:12px;border-bottom:1px solid #26364d}
-th{color:#91a4bd;font-size:12px;background:#152237}
-tr.token{cursor:pointer}
-tr.token:hover{background:#1b2a40}
-.mint{font-family:monospace;font-size:12px;overflow-wrap:anywhere}
-.statusdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fbbf24;margin-right:7px}
-#detail{display:none;margin-top:14px}
-a{color:#60a5fa}
-.signal{border:1px solid #34465f;border-radius:8px;padding:14px;margin-top:10px}
-@media(max-width:600px){main{padding:10px}header{padding:15px}h1{font-size:18px}}
+button:hover{border-color:var(--blue)}
+.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(290px,1fr);gap:14px}
+.panel-head{padding:15px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.panel-head h2{font-size:15px;margin:0}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th,td{text-align:left;padding:12px 13px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;color:var(--muted);font-weight:600}
+tbody tr{cursor:pointer}
+tbody tr:hover,tbody tr.selected{background:#1b2940}
+.token{display:flex;gap:10px;align-items:center;max-width:240px}
+.token img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#26354a}
+.token-name{font-weight:650;max-width:175px;overflow:hidden;text-overflow:ellipsis}
+.muted{color:var(--muted);font-size:12px}
+.green{color:var(--green)}.red{color:var(--red)}.gold{color:var(--gold)}
+.pill{display:inline-block;border-radius:20px;padding:4px 8px;font-size:11px;background:#26354a;color:#c9d9ef}
+.detail{padding:16px}
+.detail h2{margin:0 0 5px;font-size:19px;overflow-wrap:anywhere}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.detail-stat{background:#0b1320;border:1px solid var(--line);padding:12px;border-radius:8px;min-width:0}
+.detail-stat .value{font-size:17px}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.events{padding:0 16px 12px}
+.event{padding:11px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.empty{padding:28px 16px;color:var(--muted);text-align:center}
+footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){header{padding:16px}main{padding:12px}.stats{gap:8px}.card{padding:12px}.value{font-size:20px}}
 </style>
 </head>
 <body>
 <header>
-<h1>HENRY ALPHA TERMINAL <span style="color:#60a5fa">V2</span></h1>
-<div class="sub">SOLANA TOKEN SCANNER · LAUNCHES · MIGRATIONS · MARKET INTELLIGENCE</div>
+  <div>
+    <h1>HENRY ALPHA TERMINAL <span class="gold">V2</span></h1>
+    <div class="subtitle">SOLANA TOKEN DISCOVERY · MARKET MONITOR · PAPER MONITORING</div>
+  </div>
+  <div class="status"><span class="dot" id="statusDot"></span><span id="connection">Connecting to server…</span></div>
 </header>
 <main>
-<div class="grid">
-<div class="card"><div class="label">Backend</div><div class="value yellow" id="backend">Checking...</div><p class="muted" id="health">Checking server</p></div>
-<div class="card"><div class="label">PumpPortal</div><div class="value yellow" id="pump">Checking...</div><p class="muted">Launch and migration feed</p></div>
-<div class="card"><div class="label">Events received</div><div class="value" id="eventCount">0</div><p class="muted">Since this page opened</p></div>
-<div class="card"><div class="label">Tokens discovered</div><div class="value" id="tokenCount">0</div><p class="muted">Unique token mints in this session</p></div>
-</div>
+  <div class="notice">⚠️ <strong>MONITORING ONLY</strong> — No automatic real-money trading. Token discovery and market data are not proof that a token is safe. Market data may be delayed or unavailable.</div>
+  <section class="stats">
+    <div class="card"><div class="label">TOKENS TRACKED</div><div class="value" id="tokenCount">—</div></div>
+    <div class="card"><div class="label">PROVIDER EVENTS</div><div class="value" id="eventCount">—</div></div>
+    <div class="card"><div class="label">PUMPPORTAL</div><div class="value" id="pumpStatus">—</div></div>
+    <div class="card"><div class="label">LAST MARKET REFRESH</div><div class="value" style="font-size:15px" id="refreshTime">Waiting…</div></div>
+  </section>
 
-<section class="section">
-<h2>Live token scanner</h2>
-<p class="muted">Select a token to inspect its available event data. Market cap is displayed in SOL when provided by the feed.</p>
-<div class="toolbar">
-<input id="search" placeholder="Search token, symbol or mint address">
-<button id="refresh">Refresh events</button>
-</div>
-<div class="tablewrap">
-<table>
-<thead><tr><th>Token</th><th>Event</th><th>Market cap (SOL)</th><th>Initial buy (tokens)</th><th>Received</th></tr></thead>
-<tbody id="tokens"><tr><td colspan="5">Loading recent events...</td></tr></tbody>
-</table>
-</div>
-<div class="card" id="detail">
-<h3 id="detailTitle">Selected token</h3>
-<div class="muted" id="detailBody"></div>
-</div>
-</section>
+  <div class="controls">
+    <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
+    <select id="sort">
+      <option value="newest">Newest activity</option>
+      <option value="liquidity">Highest liquidity</option>
+      <option value="volume">Highest 24h volume</option>
+      <option value="marketcap">Highest market cap</option>
+    </select>
+    <button id="refresh">Refresh</button>
+  </div>
 
-<section class="section">
-<h2>Signal monitor</h2>
-<div class="signal"><strong class="green">BUY NOW — Inactive</strong><p class="muted">Will activate only after trade data and buy-pressure rules are implemented and tested.</p></div>
-<div class="signal"><strong class="red">DUMP NOW — Inactive</strong><p class="muted">Planned trigger: accelerating sell pressure; price confirmation will not be required.</p></div>
-<p class="muted">No automatic trading. Live trade pressure and wallet tracking are not implemented yet.</p>
-</section>
+  <div class="layout">
+    <section class="panel">
+      <div class="panel-head"><h2>DISCOVERED SOLANA TOKENS</h2><span class="muted" id="listInfo">Waiting for data</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>TOKEN</th><th>PRICE USD</th><th>MARKET CAP</th><th>LIQUIDITY</th><th>24H VOLUME</th><th>24H CHANGE</th></tr></thead>
+          <tbody id="tokenRows"><tr><td colspan="6" class="empty">Connecting to token feed…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>TOKEN DETAILS</h2><span class="pill" id="detailBadge">Select a token</span></div>
+      <div class="detail" id="detail">
+        <div class="empty">Choose a token from the list to inspect available market data.</div>
+      </div>
+      <div class="panel-head"><h2>RECENT DISCOVERY EVENTS</h2></div>
+      <div class="events" id="eventRows"><div class="empty">No events received yet.</div></div>
+    </section>
+  </div>
 </main>
+<footer>HENRY ALPHA TERMINAL V2 · Market data supplied by connected providers · No trade execution</footer>
 
 <script>
-const seen = new Map();
-let eventCount = 0;
-let pumpConnected = false;
-
-function shortAddress(s) {
-  if (!s) return "—";
-  return s.length > 14 ? s.slice(0, 6) + "..." + s.slice(-5) : s;
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const state={tokens:[],events:[],selectedMint:null,ws:null,retry:2000,connected:false};
+const money=n=>{
+  if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
+  n=Number(n);
+  if(Math.abs(n)>=1e9)return '$'+(n/1e9).toFixed(2)+'B';
+  if(Math.abs(n)>=1e6)return '$'+(n/1e6).toFixed(2)+'M';
+  if(Math.abs(n)>=1e3)return '$'+(n/1e3).toFixed(2)+'K';
+  if(Math.abs(n)<0.0001&&n!==0)return '$'+n.toExponential(2);
+  return '$'+n.toLocaleString(undefined,{maximumFractionDigits:6});
+};
+const number=n=>n==null?'—':Number(n).toLocaleString();
+const shortMint=m=>m&&m.length>16?m.slice(0,7)+'…'+m.slice(-6):(m||'—');
+const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dateText=d=>{if(!d)return '—';const t=Date.parse(d);return Number.isFinite(t)?new Date(t).toLocaleString():'—';};
+const ageText=d=>{const t=Date.parse(d||'');if(!Number.isFinite(t))return '—';const m=Math.max(0,Math.floor((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.floor(m/60)+'h':Math.floor(m/1440)+'d';};
+function setConnection(text,ok){
+  $('connection').textContent=text;
+  $('statusDot').style.background=ok?'#32d583':'#f5c76a';
+  state.connected=ok;
 }
-function fmt(n) {
-  return typeof n === "number" && Number.isFinite(n)
-    ? n.toLocaleString(undefined, {maximumFractionDigits: 3})
-    : "—";
+async function api(url){
+  const r=await fetch(url,{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
 }
-function showDetail(d, receivedAt) {
-  document.getElementById("detail").style.display = "block";
-  document.getElementById("detailTitle").textContent =
-    (d.name || "Unknown token") + (d.symbol ? " (" + d.symbol + ")" : "");
-  const fields = [
-    ["Mint address", d.mint || "—"],
-    ["Transaction type", d.txType || "—"],
-    ["Market cap (SOL)", fmt(d.marketCapSol)],
-    ["SOL amount", fmt(d.solAmount)],
-    ["Initial buy (tokens)", fmt(d.initialBuy)],
-    ["Trader wallet", d.traderPublicKey || "—"],
-    ["Bonding curve", d.bondingCurveKey || "—"],
-    ["Pool", d.pool || "—"],
-    ["Received at", receivedAt || "—"]
-  ];
-  const body = document.getElementById("detailBody");
-  body.replaceChildren();
-  fields.forEach(([label, value]) => {
-    const p = document.createElement("p");
-    const strong = document.createElement("strong");
-    strong.textContent = label + ": ";
-    const span = document.createElement("span");
-    span.textContent = value;
-    if (label === "Mint address" && d.mint) {
-      const link = document.createElement("a");
-      link.href = "https://solscan.io/token/" + encodeURIComponent(d.mint);
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = value;
-      span.replaceChildren(link);
-    }
-    p.append(strong, span);
-    body.appendChild(p);
+function filteredTokens(){
+  const q=$('search').value.trim().toLowerCase();
+  const list=state.tokens.filter(t=>!q||[t.name,t.symbol,t.mint].some(v=>String(v||'').toLowerCase().includes(q)));
+  const sort=$('sort').value;
+  list.sort((a,b)=>{
+    if(sort==='liquidity')return (b.liquidityUsd||0)-(a.liquidityUsd||0);
+    if(sort==='volume')return (b.volume24h||0)-(a.volume24h||0);
+    if(sort==='marketcap')return (b.marketCapUsd||0)-(a.marketCapUsd||0);
+    return Date.parse(b.lastEventAt||0)-Date.parse(a.lastEventAt||0);
   });
+  return list;
 }
-function addEvent(event) {
-  const d = event && event.data ? event.data : event;
-  if (!d || !d.mint) return;
-  eventCount++;
-  document.getElementById("eventCount").textContent = eventCount;
-  const previous = seen.get(d.mint);
-  seen.set(d.mint, {
-    data: d,
-    receivedAt: event.receivedAt || new Date().toISOString()
-  });
-  document.getElementById("tokenCount").textContent = seen.size;
-  renderTokens();
-}
-function renderTokens() {
-  const tbody = document.getElementById("tokens");
-  const q = document.getElementById("search").value.trim().toLowerCase();
-  const list = [...seen.entries()].reverse().filter(([mint, item]) => {
-    const d = item.data;
-    return [mint, d.name, d.symbol].some(v =>
-      String(v || "").toLowerCase().includes(q)
-    );
-  });
-  tbody.replaceChildren();
-  if (!list.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 5;
-    td.textContent = q ? "No matching tokens." : "No token events received yet.";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+function renderTokens(){
+  $('tokenCount').textContent=number(state.tokens.length);
+  const list=filteredTokens();
+  $('listInfo').textContent=list.length+' shown';
+  if(!list.length){
+    $('tokenRows').innerHTML='<tr><td colspan="6" class="empty">No tokens found yet. Launch/migration events populate this list. Try Refresh.</td></tr>';
     return;
   }
-  list.forEach(([mint, item]) => {
-    const d = item.data;
-    const tr = document.createElement("tr");
-    tr.className = "token";
-    const values = [
-      (d.name || "Unknown") + (d.symbol ? " (" + d.symbol + ")" : ""),
-      d.txType || "event",
-      fmt(d.marketCapSol),
-      fmt(d.initialBuy),
-      new Date(item.receivedAt).toLocaleTimeString()
-    ];
-    values.forEach((v, i) => {
-      const td = document.createElement("td");
-      td.textContent = i === 0 ? v : v;
-      if (i === 1) td.className = d.txType === "create" ? "green" : "";
-      tr.appendChild(td);
-    });
-    tr.addEventListener("click", () => showDetail(d, item.receivedAt));
-    tbody.appendChild(tr);
-  });
+  $('tokenRows').innerHTML=list.map(t=>{
+    const change=Number(t.priceChange24h);
+    const changeText=t.priceChange24h==null?'—':(change>0?'+':'')+change.toFixed(2)+'%';
+    const changeClass=t.priceChange24h==null?'':change>=0?'green':'red';
+    const img=t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">';
+    return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
+      '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
+      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
+  }).join('');
+  $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
 }
-async function loadStatus() {
-  try {
-    const r = await fetch("/status");
-    if (!r.ok) throw new Error("Status " + r.status);
-    const s = await r.json();
-    document.getElementById("backend").textContent = "Online";
-    document.getElementById("backend").className = "value green";
-    document.getElementById("health").textContent = "Health endpoint responding";
-    pumpConnected = s.pumpPortal === "connected";
-    document.getElementById("pump").textContent = s.pumpPortal || "Unknown";
-    document.getElementById("pump").className =
-      "value " + (pumpConnected ? "green" : "yellow");
-  } catch (e) {
-    document.getElementById("backend").textContent = "Unavailable";
-    document.getElementById("backend").className = "value red";
-    document.getElementById("health").textContent = "Could not reach backend status";
+function renderEvents(){
+  $('eventCount').textContent=number(state.events.length);
+  if(!state.events.length){$('eventRows').innerHTML='<div class="empty">No events received yet.</div>';return;}
+  $('eventRows').innerHTML=state.events.slice(0,8).map(e=>{
+    const d=e.data||{};
+    return '<div class="event"><div><span class="pill">'+escapeHtml(d.txType||'event')+'</span> <strong>'+escapeHtml(d.symbol||d.name||shortMint(d.mint))+'</strong></div><div class="muted">'+escapeHtml(dateText(e.receivedAt))+'</div><div class="muted">'+escapeHtml(shortMint(d.mint||''))+'</div></div>';
+  }).join('');
+}
+function renderDetail(t,events=[],notes={}){
+  if(!t){$('detail').innerHTML='<div class="empty">Token details unavailable.</div>';return;}
+  $('detailBadge').textContent=t.txType||'Token';
+  const change=Number(t.priceChange24h);
+  const changeText=t.priceChange24h==null?'—':(change>0?'+':'')+change.toFixed(2)+'%';
+  $('detail').innerHTML=
+    '<h2>'+escapeHtml(t.name||'Unknown token')+'</h2><div class="muted">'+escapeHtml(t.symbol||'')+'</div>'+
+    '<div style="margin-top:12px;overflow-wrap:anywhere"><div class="muted">TOKEN MINT</div><code>'+escapeHtml(t.mint)+'</code> <button id="copyMint" style="padding:5px 8px">Copy</button></div>'+
+    '<div class="detail-grid">'+
+    stat('Price',money(t.priceUsd))+stat('Market cap',money(t.marketCapUsd))+
+    stat('Liquidity',money(t.liquidityUsd))+stat('24h volume',money(t.volume24h))+
+    stat('24h buys',number(t.buys24h))+stat('24h sells',number(t.sells24h))+
+    stat('24h change',changeText)+stat('Age since event',ageText(t.firstSeenAt))+
+    '</div>'+
+    '<div class="muted">Last updated: '+escapeHtml(dateText(t.updatedAt))+'</div>'+
+    '<div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">'+
+    (t.dexUrl?'<a href="'+escapeHtml(t.dexUrl)+'" target="_blank" rel="noopener noreferrer">Open DexScreener ↗</a>':'')+
+    '<a href="https://solscan.io/token/'+encodeURIComponent(t.mint)+'" target="_blank" rel="noopener noreferrer">Open Solscan ↗</a></div>'+
+    '<div class="notice" style="margin-top:16px;font-size:12px">Pressure signals, risk scoring, historical candles and full live trades are not implemented in this dashboard version. Do not interpret missing data as zero risk.</div>'+
+    '<h3 style="font-size:13px;margin-top:20px">DISCOVERY HISTORY</h3>'+
+    (events.length?events.slice(0,8).map(e=>'<div class="event"><strong>'+escapeHtml((e.data||{}).txType||'Event')+'</strong><div class="muted">'+escapeHtml(dateText(e.receivedAt))+'</div></div>').join(''):'<div class="muted">No matching discovery events in the current server memory.</div>')+
+    '<div class="muted" style="margin-top:12px">Market data: '+escapeHtml(notes.market||'Latest available snapshot')+'</div>';
+  const copy=$('copyMint');
+  if(copy)copy.onclick=async()=>{try{await navigator.clipboard.writeText(t.mint);copy.textContent='Copied';}catch(_){copy.textContent='Copy failed';}};
+}
+function stat(label,value){return '<div class="detail-stat"><div class="label">'+escapeHtml(label)+'</div><div class="value">'+escapeHtml(value)+'</div></div>';}
+async function selectToken(mint){
+  state.selectedMint=mint;renderTokens();
+  $('detail').innerHTML='<div class="empty">Loading token market data…</div>';
+  try{
+    const result=await api('/api/token/'+encodeURIComponent(mint));
+    renderDetail(result.token,result.recentEvents||[],result.dataNotes||{});
+  }catch(e){
+    const t=state.tokens.find(x=>x.mint===mint);
+    renderDetail(t,[]);
   }
 }
-async function loadEvents() {
-  try {
-    const r = await fetch("/events");
-    if (!r.ok) throw new Error("Events " + r.status);
-    const events = await r.json();
-    if (Array.isArray(events)) {
-      events.slice().reverse().forEach(addEvent);
-      renderTokens();
+async function refreshAll(){
+  try{
+    const [status,list,events]=await Promise.all([
+      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events')
+    ]);
+    state.tokens=list.tokens||[];
+    state.events=events||[];
+    $('pumpStatus').textContent=status.pumpPortal||'—';
+    $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
+    renderTokens();renderEvents();
+    if(state.selectedMint){
+      const current=state.tokens.find(t=>t.mint===state.selectedMint);
+      if(current)renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
     }
-  } catch (e) {
-    console.error("Could not load events", e);
-  }
+    if(!state.connected)setConnection('Server reachable · live feed pending',false);
+  }catch(e){setConnection('Server unavailable · retrying',false);}
 }
-function connectLive() {
-  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(protocol + "//" + location.host + "/ws");
-  ws.onmessage = (message) => {
-    try {
-      const event = JSON.parse(message.data);
-      if (event.type === "status" && event.provider === "PumpPortal") {
-        document.getElementById("pump").textContent = event.status;
-        document.getElementById("pump").className =
-          "value " + (event.status === "connected" ? "green" : "yellow");
+function connectWS(){
+  if(state.ws){try{state.ws.close();}catch(_){}}
+  const scheme=location.protocol==='https:'?'wss:':'ws:';
+  const ws=new WebSocket(scheme+'//'+location.host+'/ws');
+  state.ws=ws;
+  ws.onopen=()=>{state.retry=2000;setConnection('Live connection connected',true);};
+  ws.onmessage=event=>{
+    try{
+      const msg=JSON.parse(event.data);
+      if(msg.type==='status'){
+        $('pumpStatus').textContent=msg.status||'—';
+        if(msg.status==='connected')setConnection('PumpPortal connected',true);
+        else if(msg.status==='disconnected')setConnection('PumpPortal disconnected',false);
+      }else if(msg.type==='provider-event'){
+        if(msg.data)state.events.unshift(msg);
+        if(msg.token){
+          const i=state.tokens.findIndex(t=>t.mint===msg.token.mint);
+          if(i>=0)state.tokens[i]=msg.token;else state.tokens.unshift(msg.token);
+          state.tokens=state.tokens.slice(0,500);
+        }
+        state.events=state.events.slice(0,500);
+        renderTokens();renderEvents();
+      }else if(msg.type==='market-update'&&msg.token){
+        const i=state.tokens.findIndex(t=>t.mint===msg.token.mint);
+        if(i>=0)state.tokens[i]=msg.token;
+        renderTokens();
       }
-      if (event.type === "provider-event") addEvent(event);
-    } catch (e) {
-      console.error("Invalid WebSocket message", e);
-    }
+    }catch(_){}
   };
-  ws.onclose = () => {
-    document.getElementById("pump").textContent = "Reconnecting...";
-    document.getElementById("pump").className = "value yellow";
-    setTimeout(connectLive, 3000);
+  ws.onclose=()=>{
+    if(state.ws===ws)setConnection('Live feed reconnecting…',false);
+    const delay=state.retry;
+    state.retry=Math.min(state.retry*2,30000);
+    setTimeout(connectWS,delay);
   };
-  ws.onerror = () => ws.close();
+  ws.onerror=()=>{try{ws.close();}catch(_){}};
 }
-document.getElementById("search").addEventListener("input", renderTokens);
-document.getElementById("refresh").addEventListener("click", async () => {
-  seen.clear();
-  eventCount = 0;
-  await loadEvents();
-});
-loadStatus();
-loadEvents();
-connectLive();
-setInterval(loadStatus, 10000);
+$('search').addEventListener('input',renderTokens);
+$('sort').addEventListener('change',()=>{renderTokens();refreshAll();});
+$('refresh').addEventListener('click',refreshAll);
+refreshAll();
+connectWS();
+setInterval(refreshAll,15000);
+})();
 </script>
 </body>
 </html>
