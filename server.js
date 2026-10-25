@@ -10,6 +10,7 @@ const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const { createHeliusRiskClient } = require('./lib/helius-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
+const { parseTradeMessage } = require('./lib/trade-message');
 const heliusRisk = createHeliusRiskClient();
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
@@ -165,29 +166,23 @@ function subscribeMintTrades(mint) {
 }
 
 function processTradeMessage(data) {
-  const hasTradeShape = data && (Object.hasOwn(data, 'txType') || Object.hasOwn(data, 'solAmount') || Object.hasOwn(data, 'traderPublicKey'));
-  if (!data || typeof data.mint !== 'string' || !['buy', 'sell'].includes(String(data.txType || '').toLowerCase())) {
-    if (hasTradeShape) {
-      feedDiagnostics.recordRejected(!data || typeof data.mint !== 'string' ? 'missing mint string' : 'txType is not buy/sell');
-    }
-    return false;
-  }
-  const solAmount = safeNumber(data.solAmount);
-  if (solAmount === null || solAmount < 0) {
-    feedDiagnostics.recordRejected('solAmount missing or invalid');
+  const parsedTrade = parseTradeMessage(data);
+  if (!parsedTrade.ok) {
+    if (parsedTrade.candidate) feedDiagnostics.recordRejected(parsedTrade.reason);
     return false;
   }
   feedDiagnostics.recordValidTrade();
+  const { mint, side, solAmount, wallet } = parsedTrade.trade;
   const now = Date.now();
   getSolUsdPrice().then(price => {
     if (!price) return;
     const side = String(data.txType).toLowerCase();
     const usdValue = solAmount * price;
-    const trade = { side, timestamp: now, usdValue, wallet: data.traderPublicKey || null };
-    const accepted = pressureStore.recordTrade(data.mint, trade);
+    const trade = { side, timestamp: now, usdValue, wallet };
+    const accepted = pressureStore.recordTrade(mint, trade);
     if (!accepted) return;
-    persistence.save(data.mint, 'trade', now, trade).catch(() => {});
-    const analysis = pressureStore.analyse(data.mint);
+    persistence.save(mint, 'trade', now, trade).catch(() => {});
+    const analysis = pressureStore.analyse(mint);
     // Prune stale cooldown entries and cap memory use on long-running monitors.
     if (alertedPressure.size > 5000) {
       for (const [mint, lastAt] of alertedPressure) {
@@ -195,14 +190,14 @@ function processTradeMessage(data) {
         if (alertedPressure.size <= 4000) break;
       }
     }
-    const previous = alertedPressure.get(data.mint);
+    const previous = alertedPressure.get(mint);
     if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
-      alertedPressure.set(data.mint, now);
+      alertedPressure.set(mint, now);
       const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() };
-      persistence.save(data.mint, 'alert', now, alert).catch(() => {});
-      broadcast({ type: 'pressure-alert', mint: data.mint, ...alert });
+      persistence.save(mint, 'alert', now, alert).catch(() => {});
+      broadcast({ type: 'pressure-alert', mint, ...alert });
     }
-    broadcast({ type: 'trade-observation', mint: data.mint, side, usdValue, receivedAt: new Date(now).toISOString(), analysis });
+    broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(now).toISOString(), analysis });
   });
   return true;
 }
