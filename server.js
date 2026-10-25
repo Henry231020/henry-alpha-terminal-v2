@@ -428,6 +428,19 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { mint, risk, automaticTrading: false });
   }
 
+  if (url.pathname === '/api/alerts') {
+    const mint = url.searchParams.get('mint');
+    if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 25)));
+    const rows = await persistence.recent(mint, Math.min(1000, limit * 4));
+    const alerts = rows.filter(row => row.kind === 'alert').slice(0, limit).map(row => ({
+      mint,
+      observedAt: row.observed_at,
+      ...(row.payload || {})
+    }));
+    return sendJson(res, 200, { mint, count: alerts.length, alerts, persistence: persistence.status(), automaticTrading: false });
+  }
+
   if (url.pathname === '/api/pressure') {
     const mint = url.searchParams.get('mint');
     if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), store: pressureStore.getStats() });
