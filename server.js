@@ -176,7 +176,7 @@ function processTradeMessage(data) {
   const now = Date.now();
   getSolUsdPrice().then(price => {
     if (!price) return;
-    const side = String(data.txType).toLowerCase();
+    // Use the validated, normalized side returned by parseTradeMessage.
     const usdValue = solAmount * price;
     const trade = { side, timestamp: now, usdValue, wallet };
     const accepted = pressureStore.recordTrade(mint, trade);
