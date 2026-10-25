@@ -46,7 +46,7 @@ test('discovers persisted mints with a bounded parameterized query', async () =>
   const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
   await store.initialize();
   assert.deepEqual(await store.mints(99999), ['mint-a', 'mint-b']);
-  const query = calls.find(item => item.sql.startsWith('SELECT DISTINCT mint'));
+  const query = calls.find(item => item.sql.startsWith('SELECT mint FROM pressure_observations GROUP BY mint'));
   assert.equal(query.args[0], 2000);
   assert.match(query.sql, /\$1/);
 });
