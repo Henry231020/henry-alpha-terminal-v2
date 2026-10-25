@@ -216,6 +216,15 @@ async function selectToken(mint){
         panel.innerHTML = '<strong>PRESSURE SIGNAL: '+escapeHtml(a.signal||'WAIT')+'</strong><br>Buy volume (last 60s): '+escapeHtml(money(m.buyUsd))+' · Sell volume: '+escapeHtml(money(m.sellUsd))+'<br>Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>Wallet risk: '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+escapeHtml((a.reasons||[]).join(' '))+'<br><span class="muted">Observed data only · alert-only · automatic trading disabled</span>';
       }
     } catch (_) {}
+    try {
+      const saved = await api('/api/alerts?mint='+encodeURIComponent(mint)+'&limit=10');
+      const panel = $('pressurePanel');
+      if(panel) {
+        const history = saved.alerts || [];
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">SAVED URGENT ALERTS</h4>' +
+          (history.length ? history.map(item => '<div class="event"><strong>'+escapeHtml(item.signal||'Pressure alert')+'</strong><div class="muted">'+escapeHtml(dateText(item.receivedAt||item.observedAt))+'</div></div>').join('') : '<div class="muted">No saved alerts for this token, or PostgreSQL persistence is not configured.</div>');
+      }
+    } catch (_) {}
 
   }catch(e){
     const t=state.tokens.find(x=>x.mint===mint);
