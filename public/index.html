@@ -2,131 +2,248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HENRY ALPHA TERMINAL V2</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: #080d16;
-      color: #e5edf7;
-      font-family: Arial, sans-serif;
-    }
-    header {
-      padding: 22px;
-      background: #101a2a;
-      border-bottom: 1px solid #25344a;
-    }
-    h1 { margin: 0; font-size: 22px; }
-    .sub { color: #91a4bd; margin-top: 8px; font-size: 13px; }
-    main { max-width: 1100px; margin: auto; padding: 20px; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-      gap: 14px;
-    }
-    .card {
-      background: #111b2b;
-      border: 1px solid #26364d;
-      border-radius: 12px;
-      padding: 18px;
-      min-width: 0;
-    }
-    .label { color: #91a4bd; font-size: 13px; }
-    .value { font-size: 20px; font-weight: bold; margin-top: 10px; }
-    .muted { color: #91a4bd; font-size: 13px; line-height: 1.6; }
-    .status { color: #fbbf24; }
-    .signals { margin-top: 18px; }
-    .signal {
-      padding: 16px;
-      border-radius: 10px;
-      margin-top: 12px;
-      background: #141e2e;
-      border: 1px solid #304057;
-    }
-    .buy { color: #4ade80; }
-    .sell { color: #f87171; }
-    code { overflow-wrap: anywhere; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HENRY ALPHA TERMINAL V2</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d16;color:#e5edf7;font:14px Arial,sans-serif}
+header{padding:20px;background:#101a2a;border-bottom:1px solid #26364d}
+h1{font-size:21px;margin:0}
+.sub,.muted{color:#91a4bd;font-size:12px}
+.sub{margin-top:8px}
+main{max-width:1300px;margin:auto;padding:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.card{background:#111b2b;border:1px solid #26364d;border-radius:10px;padding:16px;min-width:0}
+.label{color:#91a4bd;font-size:12px}
+.value{font-size:19px;font-weight:bold;margin-top:9px}
+.green{color:#4ade80}.red{color:#f87171}.yellow{color:#fbbf24}
+.section{margin-top:20px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+input,button{background:#101a2a;color:#e5edf7;border:1px solid #34465f;border-radius:7px;padding:10px}
+input{flex:1;min-width:170px}
+button{cursor:pointer}
+button:hover{border-color:#60a5fa}
+.tablewrap{overflow-x:auto;border:1px solid #26364d;border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:760px;background:#111b2b}
+th,td{text-align:left;padding:12px;border-bottom:1px solid #26364d}
+th{color:#91a4bd;font-size:12px;background:#152237}
+tr.token{cursor:pointer}
+tr.token:hover{background:#1b2a40}
+.mint{font-family:monospace;font-size:12px;overflow-wrap:anywhere}
+.statusdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fbbf24;margin-right:7px}
+#detail{display:none;margin-top:14px}
+a{color:#60a5fa}
+.signal{border:1px solid #34465f;border-radius:8px;padding:14px;margin-top:10px}
+@media(max-width:600px){main{padding:10px}header{padding:15px}h1{font-size:18px}}
+</style>
 </head>
 <body>
-  <header>
-    <h1>HENRY ALPHA TERMINAL <span style="color:#60a5fa">V2</span></h1>
-    <div class="sub">Solana discovery · Migration monitoring · Buy/sell pressure</div>
-  </header>
+<header>
+<h1>HENRY ALPHA TERMINAL <span style="color:#60a5fa">V2</span></h1>
+<div class="sub">SOLANA TOKEN SCANNER · LAUNCHES · MIGRATIONS · MARKET INTELLIGENCE</div>
+</header>
+<main>
+<div class="grid">
+<div class="card"><div class="label">Backend</div><div class="value yellow" id="backend">Checking...</div><p class="muted" id="health">Checking server</p></div>
+<div class="card"><div class="label">PumpPortal</div><div class="value yellow" id="pump">Checking...</div><p class="muted">Launch and migration feed</p></div>
+<div class="card"><div class="label">Events received</div><div class="value" id="eventCount">0</div><p class="muted">Since this page opened</p></div>
+<div class="card"><div class="label">Tokens discovered</div><div class="value" id="tokenCount">0</div><p class="muted">Unique token mints in this session</p></div>
+</div>
 
-  <main>
-    <div class="grid">
-      <section class="card">
-        <div class="label">Backend connection</div>
-        <div class="value status" id="connection">Checking…</div>
-        <p class="muted" id="health">Checking server health.</p>
-      </section>
-      <section class="card">
-        <div class="label">PumpPortal</div>
-        <div class="value" id="pump">Not connected</div>
-        <p class="muted">Connection status will appear after integration.</p>
-      </section>
-      <section class="card">
-        <div class="label">Shrine</div>
-        <div class="value" id="shrine">Not connected</div>
-        <p class="muted">Connection status will appear after integration.</p>
-      </section>
-      <section class="card">
-        <div class="label">Live events received</div>
-        <div class="value" id="events">0</div>
-        <p class="muted">No live provider events have been verified yet.</p>
-      </section>
-    </div>
+<section class="section">
+<h2>Live token scanner</h2>
+<p class="muted">Select a token to inspect its available event data. Market cap is displayed in SOL when provided by the feed.</p>
+<div class="toolbar">
+<input id="search" placeholder="Search token, symbol or mint address">
+<button id="refresh">Refresh events</button>
+</div>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Token</th><th>Event</th><th>Market cap (SOL)</th><th>Initial buy (tokens)</th><th>Received</th></tr></thead>
+<tbody id="tokens"><tr><td colspan="5">Loading recent events...</td></tr></tbody>
+</table>
+</div>
+<div class="card" id="detail">
+<h3 id="detailTitle">Selected token</h3>
+<div class="muted" id="detailBody"></div>
+</div>
+</section>
 
-    <section class="signals">
-      <h2>Signal monitor</h2>
-      <p class="muted">
-        Signals are not active until transaction feeds are connected
-        and validated. No automatic trading.
-      </p>
-      <div class="signal buy">
-        <strong>BUY NOW — Inactive</strong>
-        <p class="muted">Waiting for validated buying-pressure data.</p>
-      </div>
-      <div class="signal sell">
-        <strong>DUMP NOW — Inactive</strong>
-        <p class="muted">
-          Planned trigger: accelerating selling pressure.
-          Price confirmation is not required.
-        </p>
-      </div>
-    </section>
+<section class="section">
+<h2>Signal monitor</h2>
+<div class="signal"><strong class="green">BUY NOW — Inactive</strong><p class="muted">Will activate only after trade data and buy-pressure rules are implemented and tested.</p></div>
+<div class="signal"><strong class="red">DUMP NOW — Inactive</strong><p class="muted">Planned trigger: accelerating sell pressure; price confirmation will not be required.</p></div>
+<p class="muted">No automatic trading. Live trade pressure and wallet tracking are not implemented yet.</p>
+</section>
+</main>
 
-    <section class="signals card">
-      <h2>Recent provider events</h2>
-      <div class="muted" id="feed">
-        Waiting for the backend to be deployed.
-      </div>
-    </section>
-  </main>
+<script>
+const seen = new Map();
+let eventCount = 0;
+let pumpConnected = false;
 
-  <script>
-    async function checkHealth() {
-      try {
-        const response = await fetch("/health");
-        if (!response.ok) throw new Error("Server returned " + response.status);
-        const data = await response.json();
-        document.getElementById("connection").textContent =
-          data.ok ? "Backend online" : "Backend issue";
-        document.getElementById("connection").className =
-          "value " + (data.ok ? "buy" : "sell");
-        document.getElementById("health").textContent =
-          "Started: " + data.startedAt;
-      } catch (error) {
-        document.getElementById("connection").textContent = "Unavailable";
-        document.getElementById("health").textContent =
-          "Deploy the Node.js backend to enable this dashboard.";
-      }
+function shortAddress(s) {
+  if (!s) return "—";
+  return s.length > 14 ? s.slice(0, 6) + "..." + s.slice(-5) : s;
+}
+function fmt(n) {
+  return typeof n === "number" && Number.isFinite(n)
+    ? n.toLocaleString(undefined, {maximumFractionDigits: 3})
+    : "—";
+}
+function showDetail(d, receivedAt) {
+  document.getElementById("detail").style.display = "block";
+  document.getElementById("detailTitle").textContent =
+    (d.name || "Unknown token") + (d.symbol ? " (" + d.symbol + ")" : "");
+  const fields = [
+    ["Mint address", d.mint || "—"],
+    ["Transaction type", d.txType || "—"],
+    ["Market cap (SOL)", fmt(d.marketCapSol)],
+    ["SOL amount", fmt(d.solAmount)],
+    ["Initial buy (tokens)", fmt(d.initialBuy)],
+    ["Trader wallet", d.traderPublicKey || "—"],
+    ["Bonding curve", d.bondingCurveKey || "—"],
+    ["Pool", d.pool || "—"],
+    ["Received at", receivedAt || "—"]
+  ];
+  const body = document.getElementById("detailBody");
+  body.replaceChildren();
+  fields.forEach(([label, value]) => {
+    const p = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = label + ": ";
+    const span = document.createElement("span");
+    span.textContent = value;
+    if (label === "Mint address" && d.mint) {
+      const link = document.createElement("a");
+      link.href = "https://solscan.io/token/" + encodeURIComponent(d.mint);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = value;
+      span.replaceChildren(link);
     }
-
-    checkHealth();
-  </script>
+    p.append(strong, span);
+    body.appendChild(p);
+  });
+}
+function addEvent(event) {
+  const d = event && event.data ? event.data : event;
+  if (!d || !d.mint) return;
+  eventCount++;
+  document.getElementById("eventCount").textContent = eventCount;
+  const previous = seen.get(d.mint);
+  seen.set(d.mint, {
+    data: d,
+    receivedAt: event.receivedAt || new Date().toISOString()
+  });
+  document.getElementById("tokenCount").textContent = seen.size;
+  renderTokens();
+}
+function renderTokens() {
+  const tbody = document.getElementById("tokens");
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const list = [...seen.entries()].reverse().filter(([mint, item]) => {
+    const d = item.data;
+    return [mint, d.name, d.symbol].some(v =>
+      String(v || "").toLowerCase().includes(q)
+    );
+  });
+  tbody.replaceChildren();
+  if (!list.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = q ? "No matching tokens." : "No token events received yet.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  list.forEach(([mint, item]) => {
+    const d = item.data;
+    const tr = document.createElement("tr");
+    tr.className = "token";
+    const values = [
+      (d.name || "Unknown") + (d.symbol ? " (" + d.symbol + ")" : ""),
+      d.txType || "event",
+      fmt(d.marketCapSol),
+      fmt(d.initialBuy),
+      new Date(item.receivedAt).toLocaleTimeString()
+    ];
+    values.forEach((v, i) => {
+      const td = document.createElement("td");
+      td.textContent = i === 0 ? v : v;
+      if (i === 1) td.className = d.txType === "create" ? "green" : "";
+      tr.appendChild(td);
+    });
+    tr.addEventListener("click", () => showDetail(d, item.receivedAt));
+    tbody.appendChild(tr);
+  });
+}
+async function loadStatus() {
+  try {
+    const r = await fetch("/status");
+    if (!r.ok) throw new Error("Status " + r.status);
+    const s = await r.json();
+    document.getElementById("backend").textContent = "Online";
+    document.getElementById("backend").className = "value green";
+    document.getElementById("health").textContent = "Health endpoint responding";
+    pumpConnected = s.pumpPortal === "connected";
+    document.getElementById("pump").textContent = s.pumpPortal || "Unknown";
+    document.getElementById("pump").className =
+      "value " + (pumpConnected ? "green" : "yellow");
+  } catch (e) {
+    document.getElementById("backend").textContent = "Unavailable";
+    document.getElementById("backend").className = "value red";
+    document.getElementById("health").textContent = "Could not reach backend status";
+  }
+}
+async function loadEvents() {
+  try {
+    const r = await fetch("/events");
+    if (!r.ok) throw new Error("Events " + r.status);
+    const events = await r.json();
+    if (Array.isArray(events)) {
+      events.slice().reverse().forEach(addEvent);
+      renderTokens();
+    }
+  } catch (e) {
+    console.error("Could not load events", e);
+  }
+}
+function connectLive() {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(protocol + "//" + location.host + "/ws");
+  ws.onmessage = (message) => {
+    try {
+      const event = JSON.parse(message.data);
+      if (event.type === "status" && event.provider === "PumpPortal") {
+        document.getElementById("pump").textContent = event.status;
+        document.getElementById("pump").className =
+          "value " + (event.status === "connected" ? "green" : "yellow");
+      }
+      if (event.type === "provider-event") addEvent(event);
+    } catch (e) {
+      console.error("Invalid WebSocket message", e);
+    }
+  };
+  ws.onclose = () => {
+    document.getElementById("pump").textContent = "Reconnecting...";
+    document.getElementById("pump").className = "value yellow";
+    setTimeout(connectLive, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+document.getElementById("search").addEventListener("input", renderTokens);
+document.getElementById("refresh").addEventListener("click", async () => {
+  seen.clear();
+  eventCount = 0;
+  await loadEvents();
+});
+loadStatus();
+loadEvents();
+connectLive();
+setInterval(loadStatus, 10000);
+</script>
 </body>
 </html>
