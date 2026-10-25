@@ -23,6 +23,6 @@ test('dashboard reads feed diagnostics from status endpoint without enabling tra
   assert.match(html, /fd\.malformedJsonMessages/);
   assert.match(html, /Last recorded/);
   assert.match(html, /Counts reset when server restarts/);
-  assert.match(html, /Live format not independently verified/);
+  assert.match(html, /live format not independently verified/i);
   assert.match(html, /No automatic real-money trading/);
 });
