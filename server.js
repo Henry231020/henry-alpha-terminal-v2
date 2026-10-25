@@ -312,7 +312,7 @@ async function refreshOneToken(mint) {
       pressureStore.recordSnapshot(mint, snapshot);
       persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
-    pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
+    pressureStore.updateLiquidity(mint, merged.liquidityUsd);
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
     const message = String(error && error.message || 'Unknown DEX error');
@@ -586,7 +586,7 @@ const server = http.createServer(async (req, res) => {
           pressureStore.recordSnapshot(mint, snapshot);
           persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
         }
-        pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
 
         return sendJson(res, 200, {
           token: merged,
