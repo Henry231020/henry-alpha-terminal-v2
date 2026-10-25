@@ -17,5 +17,15 @@ test('pressure analysis waits when verified risk data is absent', () => {
 });
 test('store reports its non-persistent nature accurately', () => {
   const store = new PressureStore();
-  assert.match(store.getStats().persistence,/memory-only/);
+  assert.match(store.getStats().persistence,/PostgreSQL recovery/);
+});
+
+test('restores validated persisted trades and snapshots', () => {
+  const now = 1000000;
+  const store = new PressureStore({ clock: () => now });
+  assert.equal(store.restoreObservation('mint', 'trade', now, { side: 'buy', timestamp: now, usdValue: 25 }), true);
+  assert.equal(store.restoreObservation('mint', 'snapshot', now, { timestamp: now, priceUsd: 2 }), true);
+  assert.equal(store.restoreObservation('mint', 'trade', now, { side: 'invalid', timestamp: now, usdValue: 25 }), false);
+  assert.equal(store.getStats().tradeCount, 1);
+  assert.equal(store.getStats().snapshotCount, 1);
 });
