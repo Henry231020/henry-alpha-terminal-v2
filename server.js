@@ -94,6 +94,60 @@ function normalizeToken(mint, data = {}) {
   };
 }
 
+function resolveMetadataUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const uri = value.trim();
+  if (/^https:\/\//i.test(uri)) return uri;
+  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7).replace(/^ipfs\//, '');
+  if (uri.startsWith('ar://')) return 'https://arweave.net/' + uri.slice(5);
+  return null;
+}
+
+function resolveImageUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const uri = value.trim();
+  if (/^https:\/\//i.test(uri)) return uri;
+  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7).replace(/^ipfs\//, '');
+  if (uri.startsWith('ar://')) return 'https://arweave.net/' + uri.slice(5);
+  return null;
+}
+
+const metadataRequests = new Set();
+async function resolveTokenMetadata(token) {
+  if (!token || !token.mint || token.image || !token.uri || metadataRequests.has(token.mint)) return;
+  const metadataUrl = resolveMetadataUrl(token.uri);
+  if (!metadataUrl) return;
+  metadataRequests.add(token.mint);
+  try {
+    const response = await fetch(metadataUrl, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(7000)
+    });
+    if (!response.ok) return;
+    const metadata = await response.json();
+    const current = tokens.get(token.mint);
+    if (!current || current.uri !== token.uri) return;
+    const image = resolveImageUrl(metadata && metadata.image);
+    const next = {
+      ...current,
+      name: current.name === 'Unknown token' && metadata.name ? metadata.name : current.name,
+      symbol: current.symbol || (metadata.symbol || ''),
+      image,
+      metadataStatus: image ? 'image loaded from token metadata' : 'metadata checked; image unavailable',
+      updatedAt: new Date().toISOString()
+    };
+    tokens.set(token.mint, next);
+    broadcast({ type: 'token-metadata', token: next });
+  } catch (_) {
+    const current = tokens.get(token.mint);
+    if (current && current.uri === token.uri) {
+      tokens.set(token.mint, { ...current, metadataStatus: 'metadata fetch failed; image unavailable' });
+    }
+  } finally {
+    metadataRequests.delete(token.mint);
+  }
+}
+
 function upsertFromEvent(event) {
   const data = event && event.data ? event.data : event;
 
@@ -142,7 +196,10 @@ function addEvent(payload) {
   }
 
   const token = upsertFromEvent(event);
-  if (token && token.mint) subscribeMintTrades(token.mint);
+  if (token && token.mint) {
+    subscribeMintTrades(token.mint);
+    if (!token.image && token.uri) resolveTokenMetadata(token);
+  }
 
   broadcast({
     type: 'provider-event',
