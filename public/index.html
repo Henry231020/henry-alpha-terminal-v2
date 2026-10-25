@@ -77,6 +77,9 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <div class="detail-grid" style="margin:0">
       <div class="detail-stat"><div class="label">MESSAGES RECEIVED</div><div class="value" id="feedMessages">—</div></div>
       <div class="detail-stat"><div class="label">VALID TRADE MESSAGES</div><div class="value" id="feedValidTrades">—</div></div>
+      <div class="detail-stat"><div class="label">TRADES RECORDED</div><div class="value" id="feedRecordedTrades">—</div></div>
+      <div class="detail-stat"><div class="label">PRICE UNAVAILABLE</div><div class="value" id="feedPriceUnavailable">—</div></div>
+      <div class="detail-stat"><div class="label">STORE REJECTIONS</div><div class="value" id="feedStoreRejected">—</div></div>
       <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
       <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
     </div>
@@ -253,9 +256,12 @@ async function refreshAll(){
     const fd=status.feedDiagnostics||{};
     $('feedMessages').textContent=number(fd.messagesReceived);
     $('feedValidTrades').textContent=number(fd.validTradeMessages);
+    $('feedRecordedTrades').textContent=number(fd.recordedTrades);
+    $('feedPriceUnavailable').textContent=number(fd.priceUnavailable);
+    $('feedStoreRejected').textContent=number(fd.storeRejectedTrades);
     $('feedRejectedTrades').textContent=number(fd.rejectedTradeCandidates);
     $('feedMalformed').textContent=number(fd.malformedJsonMessages);
-    $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid trade: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+'. Live format not independently verified.';
+    $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+' · Last recorded: '+(fd.lastRecordedTradeAt?dateText(fd.lastRecordedTradeAt):'none yet')+(fd.lastProcessingIssue?' · Processing issue: '+fd.lastProcessingIssue:'')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+'. Counts reset when server restarts; live format not independently verified.';
     $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
     renderTokens();renderEvents();
     if(state.selectedMint){
