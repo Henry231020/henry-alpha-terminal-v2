@@ -175,12 +175,19 @@ function processTradeMessage(data) {
   const { mint, side, solAmount, wallet } = parsedTrade.trade;
   const now = Date.now();
   getSolUsdPrice().then(price => {
-    if (!price) return;
+    if (!price) {
+      feedDiagnostics.recordPriceUnavailable();
+      return;
+    }
     // Use the validated, normalized side returned by parseTradeMessage.
     const usdValue = solAmount * price;
     const trade = { side, timestamp: now, usdValue, wallet };
     const accepted = pressureStore.recordTrade(mint, trade);
-    if (!accepted) return;
+    if (!accepted) {
+      feedDiagnostics.recordStoreRejected();
+      return;
+    }
+    feedDiagnostics.recordTradeRecorded(new Date(now).toISOString());
     persistence.save(mint, 'trade', now, trade).catch(() => {});
     const analysis = pressureStore.analyse(mint);
     // Prune stale cooldown entries and cap memory use on long-running monitors.
