@@ -25,7 +25,7 @@ test('writes and reads use parameterized SQL and bounded limits', async () => {
   assert.equal(await store.save('mint', 'trade', Date.now(), { side: 'buy' }), true);
   const rows = await store.recent('mint', 99999);
   assert.equal(rows.length, 1);
-  assert.equal(calls[2].args[1], 1000);
+  assert.equal(calls[3].args[1], 1000);
   assert.match(calls[1].sql, /\$1/);
 });
 
