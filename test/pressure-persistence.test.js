@@ -29,6 +29,15 @@ test('writes and reads use parameterized SQL and bounded limits', async () => {
   assert.match(calls[2].sql, /\$1/);
 });
 
+test('persists alert observations as a supported kind', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => { calls.push({ sql, args }); return { rows: [] }; } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  assert.equal(await store.save('mint', 'alert', Date.now(), { signal: 'URGENT DUMP PRESSURE' }), true);
+  assert.ok(calls.some(item => item.sql.startsWith('INSERT INTO pressure_observations') && item.args[1] === 'alert'));
+});
+
 test('invalid observation kind is rejected', async () => {
   const pool = { query: async () => ({ rows: [] }) };
   const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
