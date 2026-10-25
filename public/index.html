@@ -238,6 +238,23 @@ async function selectToken(mint){
           (history.length ? history.map(item => '<div class="event"><strong>'+escapeHtml(item.signal||'Pressure alert')+'</strong><div class="muted">'+escapeHtml(dateText(item.receivedAt||item.observedAt))+'</div></div>').join('') : '<div class="muted">No saved alerts for this token, or PostgreSQL persistence is not configured.</div>');
       }
     } catch (_) {}
+    try {
+      const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
+      const risk = riskResult.risk || {};
+      const panel = $('pressurePanel');
+      if(panel) {
+        const observed = risk.status === 'observed' && Number.isFinite(Number(risk.top10ConcentrationPct));
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4>' +
+          '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
+          '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
+          '<div>Unique holders observed: '+ escapeHtml(observed ? number(risk.holderCount) : 'Unknown') + '</div>' +
+          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — concentration alone cannot verify safety.</div>' +
+          '<div class="muted">'+escapeHtml(risk.reason || 'No complete holder scan result available.')+'</div>';
+      }
+    } catch (_) {
+      const panel = $('pressurePanel');
+      if(panel) panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4><div><strong>UNVERIFIED — do not treat as safe</strong></div><div>Wallet/scam risk: UNKNOWN. Risk service unavailable.</div>';
+    }
 
   }catch(e){
     const t=state.tokens.find(x=>x.mint===mint);
