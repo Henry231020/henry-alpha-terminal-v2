@@ -26,3 +26,11 @@ test('dashboard reads feed diagnostics from status endpoint without enabling tra
   assert.match(html, /live format not independently verified/i);
   assert.match(html, /No automatic real-money trading/);
 });
+
+test('token detail requests holder risk and labels incomplete results unverified', () => {
+  assert.match(html, /api\('\/api\/risk\/'\+encodeURIComponent\(mint\)\)/);
+  assert.match(html, /HOLDER CONCENTRATION CHECK/);
+  assert.match(html, /UNVERIFIED — do not treat as safe/);
+  assert.match(html, /Wallet\/scam risk: <strong>UNKNOWN<\/strong>/);
+  assert.match(html, /No automatic real-money trading/);
+});
