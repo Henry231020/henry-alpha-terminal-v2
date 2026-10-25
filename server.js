@@ -4,6 +4,23 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
+const { MarketCache } = require('./lib/market-cache');
+const { PressureStore } = require('./lib/pressure-store');
+const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
+const { createHeliusRiskClient } = require('./lib/helius-risk');
+const { createPressurePersistence } = require('./lib/pressure-persistence');
+const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
+const { parseTradeMessage } = require('./lib/trade-message');
+const heliusRisk = createHeliusRiskClient();
+const persistence = createPressurePersistence();
+const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
+const pressureStore = new PressureStore();
+let tradeSubscriptions = null;
+let solUsdPrice = null;
+let solUsdCheckedAt = 0;
+let solUsdRequest = null;
+let tradeFeedStatus = 'waiting for API key';
+const alertedPressure = new Map();
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -22,8 +39,14 @@ let pumpStatus = 'connecting';
 let reconnectTimer = null;
 let reconnectDelay = 2000;
 let totalEvents = 0;
+const feedDiagnostics = createFeedDiagnostics();
 let lastDexRefresh = null;
 let dexErrors = 0;
+let dexCooldownSkips = 0;
+let dexNoPairResults = 0;
+let dexHttpErrors = 0;
+let dexNetworkErrors = 0;
+let dexLastError = null;
 let refreshInProgress = false;
 
 function sendJson(res, status, value) {
@@ -69,6 +92,60 @@ function normalizeToken(mint, data = {}) {
     latestEventData: data,
     updatedAt: new Date().toISOString()
   };
+}
+
+function resolveMetadataUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const uri = value.trim();
+  if (/^https:\/\//i.test(uri)) return uri;
+  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7).replace(/^ipfs\//, '');
+  if (uri.startsWith('ar://')) return 'https://arweave.net/' + uri.slice(5);
+  return null;
+}
+
+function resolveImageUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const uri = value.trim();
+  if (/^https:\/\//i.test(uri)) return uri;
+  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7).replace(/^ipfs\//, '');
+  if (uri.startsWith('ar://')) return 'https://arweave.net/' + uri.slice(5);
+  return null;
+}
+
+const metadataRequests = new Set();
+async function resolveTokenMetadata(token) {
+  if (!token || !token.mint || token.image || !token.uri || metadataRequests.has(token.mint)) return;
+  const metadataUrl = resolveMetadataUrl(token.uri);
+  if (!metadataUrl) return;
+  metadataRequests.add(token.mint);
+  try {
+    const response = await fetch(metadataUrl, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(7000)
+    });
+    if (!response.ok) return;
+    const metadata = await response.json();
+    const current = tokens.get(token.mint);
+    if (!current || current.uri !== token.uri) return;
+    const image = resolveImageUrl(metadata && metadata.image);
+    const next = {
+      ...current,
+      name: current.name === 'Unknown token' && metadata.name ? metadata.name : current.name,
+      symbol: current.symbol || (metadata.symbol || ''),
+      image,
+      metadataStatus: image ? 'image loaded from token metadata' : 'metadata checked; image unavailable',
+      updatedAt: new Date().toISOString()
+    };
+    tokens.set(token.mint, next);
+    broadcast({ type: 'token-metadata', token: next });
+  } catch (_) {
+    const current = tokens.get(token.mint);
+    if (current && current.uri === token.uri) {
+      tokens.set(token.mint, { ...current, metadataStatus: 'metadata fetch failed; image unavailable' });
+    }
+  } finally {
+    metadataRequests.delete(token.mint);
+  }
 }
 
 function upsertFromEvent(event) {
@@ -119,6 +196,10 @@ function addEvent(payload) {
   }
 
   const token = upsertFromEvent(event);
+  if (token && token.mint) {
+    subscribeMintTrades(token.mint);
+    if (!token.image && token.uri) resolveTokenMetadata(token);
+  }
 
   broadcast({
     type: 'provider-event',
@@ -127,7 +208,94 @@ function addEvent(payload) {
   });
 }
 
+async function getSolUsdPrice() {
+  if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return solUsdPrice;
+  if (solUsdRequest) return solUsdRequest;
+  solUsdRequest = (async () => {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+      const body = await response.json();
+      const price = safeNumber(body?.solana?.usd);
+      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); }
+      return price;
+    } catch (_) { return null; }
+  })();
+  try { return await solUsdRequest; } finally { solUsdRequest = null; }
+}
+function subscribeMintTrades(mint) {
+  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
+}
+
+const pendingTrades = [];
+const MAX_PENDING_TRADES = 500;
+const ALERT_COOLDOWN_MS = 30000;
+
+function recordTradeAtPrice(item, price) {
+  const { mint, side, solAmount, wallet, timestamp } = item;
+  const usdValue = solAmount * price;
+  const trade = { side, timestamp, usdValue, wallet };
+  const accepted = pressureStore.recordTrade(mint, trade);
+  if (!accepted) {
+    feedDiagnostics.recordStoreRejected();
+    return;
+  }
+  feedDiagnostics.recordTradeRecorded(new Date(timestamp).toISOString());
+  persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
+  const analysis = pressureStore.analyse(mint);
+  if (alertedPressure.size > 5000) {
+    for (const [key, lastAt] of alertedPressure) {
+      if (timestamp - lastAt > 10 * 60 * 1000) alertedPressure.delete(key);
+      if (alertedPressure.size <= 4000) break;
+    }
+  }
+  const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
+  const previous = alertedPressure.get(mint);
+  if (isAlertSignal && (!previous || timestamp - previous > ALERT_COOLDOWN_MS)) {
+    alertedPressure.set(mint, timestamp);
+    const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
+    persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
+    broadcast({ type: 'pressure-alert', mint, ...alert });
+  }
+  broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
+}
+
+function processTradeMessage(data) {
+  const parsedTrade = parseTradeMessage(data);
+  if (!parsedTrade.ok) {
+    if (parsedTrade.candidate) feedDiagnostics.recordRejected(parsedTrade.reason);
+    return false;
+  }
+  feedDiagnostics.recordValidTrade();
+  const item = { ...parsedTrade.trade, timestamp: Date.now() };
+  getSolUsdPrice().then(price => {
+    if (!price) {
+      feedDiagnostics.recordPriceUnavailable();
+      // Retain a bounded queue so a temporary price-provider outage does not
+      // discard otherwise valid trades. Expire old items before retrying.
+      const cutoff = Date.now() - 5 * 60 * 1000;
+      while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
+      if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
+      pendingTrades.push(item);
+      return;
+    }
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
+    const queued = pendingTrades.splice(0, pendingTrades.length);
+    for (const pending of queued) recordTradeAtPrice(pending, price);
+    recordTradeAtPrice(item, price);
+  }).catch(() => {
+    feedDiagnostics.recordPriceUnavailable();
+    if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
+    pendingTrades.push(item);
+  });
+  return true;
+}
+
 async function fetchDexPairs(mint) {
+  const cached = marketCache.get(mint);
+  if (cached) return cached;
+  if (!marketCache.canRequest()) throw new Error('DexScreener rate-limit cooldown active');
   const response = await fetch(
     `https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`,
     {
@@ -136,13 +304,17 @@ async function fetchDexPairs(mint) {
     }
   );
 
+  marketCache.noteStatus(response.status);
   if (!response.ok) {
     throw new Error(`DexScreener HTTP ${response.status}`);
   }
 
   const pairs = await response.json();
 
-  if (!Array.isArray(pairs) || !pairs.length) return null;
+  if (!Array.isArray(pairs) || !pairs.length) {
+    dexNoPairResults++;
+    return null;
+  }
 
   pairs.sort((a, b) =>
     (Number(b?.liquidity?.usd) || 0) -
@@ -151,7 +323,7 @@ async function fetchDexPairs(mint) {
 
   const pair = pairs[0];
 
-  return {
+  const market = {
     priceUsd: safeNumber(pair.priceUsd),
     marketCapUsd: safeNumber(pair.marketCap) ?? safeNumber(pair.fdv),
     liquidityUsd: safeNumber(pair.liquidity?.usd),
@@ -172,6 +344,8 @@ async function fetchDexPairs(mint) {
     source: 'DexScreener',
     checkedAt: new Date().toISOString()
   };
+  marketCache.set(mint, market);
+  return market;
 }
 
 async function refreshOneToken(mint) {
@@ -190,12 +364,25 @@ async function refreshOneToken(mint) {
     };
 
     tokens.set(mint, merged);
+    if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
+      const snapshot = { timestamp: Date.now(), priceUsd: merged.priceUsd };
+      pressureStore.recordSnapshot(mint, snapshot);
+      persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
+    }
+    pressureStore.updateLiquidity(mint, merged.liquidityUsd);
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
+    const message = String(error && error.message || 'Unknown DEX error');
+    dexLastError = { message, at: new Date().toISOString() };
+    if (message.includes('rate-limit cooldown active')) {
+      dexCooldownSkips++;
+      return;
+    }
     dexErrors++;
-
+    if (message.startsWith('DexScreener HTTP ')) dexHttpErrors++;
+    else dexNetworkErrors++;
     if (dexErrors < 5 || dexErrors % 25 === 0) {
-      console.error('DexScreener refresh failed:', error.message);
+      console.error('DexScreener refresh failed:', message);
     }
   }
 }
@@ -232,7 +419,8 @@ function connectPumpPortal() {
 
   console.log('Connecting to PumpPortal...');
 
-  const socket = new WebSocket(PUMP_URL);
+  const socketUrl = process.env.PUMPPORTAL_API_KEY ? PUMP_URL + '?api-key=' + encodeURIComponent(process.env.PUMPPORTAL_API_KEY) : PUMP_URL;
+  const socket = new WebSocket(socketUrl);
   pumpSocket = socket;
 
   socket.on('open', () => {
@@ -243,6 +431,11 @@ function connectPumpPortal() {
 
     socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
     socket.send(JSON.stringify({ method: 'subscribeMigration' }));
+    tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
+    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
+    if (process.env.PUMPPORTAL_API_KEY) {
+      for (const mint of tokens.keys()) tradeSubscriptions.subscribe(mint);
+    }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
 
@@ -255,9 +448,13 @@ function connectPumpPortal() {
   });
 
   socket.on('message', raw => {
+    feedDiagnostics.recordMessage();
     try {
-      addEvent(JSON.parse(raw.toString()));
+      const parsed = JSON.parse(raw.toString());
+      if (processTradeMessage(parsed)) return;
+      addEvent(parsed);
     } catch (_) {
+      feedDiagnostics.recordMalformedJson();
       console.error('Ignored invalid PumpPortal message');
     }
   });
@@ -270,6 +467,8 @@ function connectPumpPortal() {
     if (pumpSocket !== socket) return;
 
     pumpStatus = 'disconnected';
+    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'disconnected' : 'disabled: API key required';
+    tradeSubscriptions = null;
 
     broadcast({
       type: 'status',
@@ -317,9 +516,61 @@ const server = http.createServer(async (req, res) => {
       dexScreener: 'market lookups enabled',
       lastDexRefresh,
       dexErrors,
+      dexDiagnostics: { httpErrors: dexHttpErrors, networkErrors: dexNetworkErrors, cooldownSkips: dexCooldownSkips, noPairResults: dexNoPairResults, lastError: dexLastError },
+      marketCache: marketCache.getStats(),
+      pressureObservations: pressureStore.getStats(),
+      tradeFeed: tradeFeedStatus,
+      feedDiagnostics: feedDiagnostics.snapshot(),
+      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
+      persistence: persistence.status(),
+      tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
+      solUsdPrice,
+      pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
-      persistence: 'in-memory only; database integration still required'
+      persistenceMode: persistence.status().mode
     });
+  }
+
+  if (url.pathname.startsWith('/api/risk/')) {
+    const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
+    if (!mint) return sendJson(res, 400, { error: 'mint required' });
+    const risk = await heliusRisk.getHolderRisk(mint);
+    if (risk.status === 'observed') {
+      pressureStore.updateHolderRisk(mint, {
+        holderConcentrationPct: risk.top10ConcentrationPct,
+        walletRisk: 'unknown'
+      });
+      persistence.save(mint, 'risk', Date.now(), risk).catch(() => {});
+    }
+    return sendJson(res, 200, { mint, risk, automaticTrading: false });
+  }
+
+  if (url.pathname === '/api/alerts') {
+    const mint = url.searchParams.get('mint');
+    if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 25)));
+    const rows = await persistence.recentAlerts(mint, limit);
+    const alerts = rows.map(row => ({
+      mint,
+      observedAt: row.observed_at,
+      ...(row.payload || {})
+    }));
+    return sendJson(res, 200, { mint, count: alerts.length, alerts, persistence: persistence.status(), automaticTrading: false });
+  }
+
+  if (url.pathname === '/api/pressure') {
+    const mint = url.searchParams.get('mint');
+    if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), store: pressureStore.getStats() });
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    const pressure = [...tokens.values()].slice(0, limit).map(token => ({
+      mint: token.mint,
+      name: token.name,
+      symbol: token.symbol,
+      priceUsd: token.priceUsd,
+      liquidityUsd: token.liquidityUsd,
+      analysis: pressureStore.analyse(token.mint)
+    }));
+    return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
   }
 
   if (url.pathname === '/events' || url.pathname === '/api/events') {
@@ -386,6 +637,12 @@ const server = http.createServer(async (req, res) => {
         };
 
         tokens.set(mint, merged);
+        if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
+          const snapshot = { timestamp: Date.now(), priceUsd: merged.priceUsd };
+          pressureStore.recordSnapshot(mint, snapshot);
+          persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
+        }
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
 
         return sendJson(res, 200, {
           token: merged,
@@ -473,6 +730,35 @@ wss.on('connection', socket => {
 
 server.listen(PORT, HOST, () => {
   console.log(`HENRY ALPHA TERMINAL V2 listening on ${PORT}`);
-  connectPumpPortal();
-  setInterval(refreshMarketData, DEX_REFRESH_MS);
+
+  let liveFeedsStarted = false;
+  function startLiveFeeds() {
+    if (liveFeedsStarted) return;
+    liveFeedsStarted = true;
+    connectPumpPortal();
+    setInterval(refreshMarketData, DEX_REFRESH_MS);
+  }
+
+  persistence.initialize().then(async result => {
+    console.log('Pressure persistence:', result);
+    if (result && result.ready && typeof persistence.mints === 'function') {
+      try {
+        const mints = await persistence.mints(500);
+        let restored = 0;
+        for (const mint of mints) {
+          const rows = await persistence.recent(mint, 1000);
+          // Query is newest-first; replay oldest-first before accepting live events.
+          rows.reverse();
+          for (const row of rows) {
+            if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
+          }
+        }
+        console.log('Pressure persistence recovery:', { mints: mints.length, restored });
+      } catch (error) {
+        console.error('Pressure persistence recovery failed; continuing in memory mode:', error.message);
+      }
+    }
+  }).catch(error => {
+    console.error('Pressure persistence initialization failed:', error.message);
+  }).finally(startLiveFeeds);
 });
