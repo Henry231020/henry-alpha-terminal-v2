@@ -53,3 +53,19 @@ test('liquidity refresh preserves independently verified holder risk', () => {
   assert.equal(state.risk.holderConcentrationPct, 12);
   assert.equal(state.risk.walletRisk, 'low');
 });
+
+test('holder-only risk updates preserve liquidity and fail closed on malformed concentration', () => {
+  const store = new PressureStore();
+  store.setRisk('mint', { liquidityUsd: 12000, holderConcentrationPct: null, walletRisk: 'unknown' });
+  store.updateHolderRisk('mint', { holderConcentrationPct: 18, walletRisk: 'unknown' });
+  let risk = store.ensure('mint').risk;
+  assert.equal(risk.liquidityUsd, 12000);
+  assert.equal(risk.holderConcentrationPct, 18);
+  assert.equal(risk.walletRisk, 'unknown');
+
+  store.updateHolderRisk('mint', { holderConcentrationPct: 'not-a-number', walletRisk: 'trusted' });
+  risk = store.ensure('mint').risk;
+  assert.equal(risk.liquidityUsd, 12000);
+  assert.equal(risk.holderConcentrationPct, null);
+  assert.equal(risk.walletRisk, 'unknown');
+});
