@@ -37,6 +37,15 @@ let pumpStatus = 'connecting';
 let reconnectTimer = null;
 let reconnectDelay = 2000;
 let totalEvents = 0;
+const feedDiagnostics = {
+  messagesReceived: 0,
+  validTradeMessages: 0,
+  rejectedTradeCandidates: 0,
+  malformedJsonMessages: 0,
+  lastMessageAt: null,
+  lastValidTradeAt: null,
+  lastRejectedReason: null
+};
 let lastDexRefresh = null;
 let dexErrors = 0;
 let refreshInProgress = false;
@@ -163,9 +172,23 @@ function subscribeMintTrades(mint) {
 }
 
 function processTradeMessage(data) {
-  if (!data || typeof data.mint !== 'string' || !['buy', 'sell'].includes(String(data.txType || '').toLowerCase())) return false;
+  const hasTradeShape = data && (Object.hasOwn(data, 'txType') || Object.hasOwn(data, 'solAmount') || Object.hasOwn(data, 'traderPublicKey'));
+  if (!data || typeof data.mint !== 'string' || !['buy', 'sell'].includes(String(data.txType || '').toLowerCase())) {
+    if (hasTradeShape) {
+      feedDiagnostics.rejectedTradeCandidates++;
+      feedDiagnostics.lastRejectedReason = !data || typeof data.mint !== 'string' ? 'missing mint string' : 'txType is not buy/sell';
+    }
+    return false;
+  }
   const solAmount = safeNumber(data.solAmount);
-  if (solAmount === null || solAmount < 0) return false;
+  if (solAmount === null || solAmount < 0) {
+    feedDiagnostics.rejectedTradeCandidates++;
+    feedDiagnostics.lastRejectedReason = 'solAmount missing or invalid';
+    return false;
+  }
+  feedDiagnostics.validTradeMessages++;
+  feedDiagnostics.lastValidTradeAt = new Date().toISOString();
+  feedDiagnostics.lastRejectedReason = null;
   const now = Date.now();
   getSolUsdPrice().then(price => {
     if (!price) return;
@@ -341,11 +364,14 @@ function connectPumpPortal() {
   });
 
   socket.on('message', raw => {
+    feedDiagnostics.messagesReceived++;
+    feedDiagnostics.lastMessageAt = new Date().toISOString();
     try {
       const parsed = JSON.parse(raw.toString());
       if (processTradeMessage(parsed)) return;
       addEvent(parsed);
     } catch (_) {
+      feedDiagnostics.malformedJsonMessages++;
       console.error('Ignored invalid PumpPortal message');
     }
   });
@@ -410,6 +436,7 @@ const server = http.createServer(async (req, res) => {
       marketCache: marketCache.getStats(),
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
+      feedDiagnostics: { ...feedDiagnostics },
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       persistence: persistence.status(),
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
