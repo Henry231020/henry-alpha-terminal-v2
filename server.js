@@ -404,7 +404,16 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/pressure') {
     const mint = url.searchParams.get('mint');
     if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), store: pressureStore.getStats() });
-    return sendJson(res, 200, { store: pressureStore.getStats(), automaticTrading: false, note: 'Per-token pressure data requires verified trade observations; this endpoint does not invent signals.' });
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    const pressure = [...tokens.values()].slice(0, limit).map(token => ({
+      mint: token.mint,
+      name: token.name,
+      symbol: token.symbol,
+      priceUsd: token.priceUsd,
+      liquidityUsd: token.liquidityUsd,
+      analysis: pressureStore.analyse(token.mint)
+    }));
+    return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
   }
 
   if (url.pathname === '/events' || url.pathname === '/api/events') {
