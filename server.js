@@ -179,7 +179,9 @@ function processTradeMessage(data) {
     const previous = alertedPressure.get(data.mint);
     if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
       alertedPressure.set(data.mint, now);
-      broadcast({ type: 'pressure-alert', mint: data.mint, signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() });
+      const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() };
+      persistence.save(data.mint, 'alert', now, alert).catch(() => {});
+      broadcast({ type: 'pressure-alert', mint: data.mint, ...alert });
     }
     broadcast({ type: 'trade-observation', mint: data.mint, side, usdValue, receivedAt: new Date(now).toISOString(), analysis });
   });
