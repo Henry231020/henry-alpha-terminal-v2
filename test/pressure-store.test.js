@@ -29,3 +29,13 @@ test('restores validated persisted trades and snapshots', () => {
   assert.equal(store.getStats().tradeCount, 1);
   assert.equal(store.getStats().snapshotCount, 1);
 });
+
+test('empty or invalid risk updates reset measurements to unknown', () => {
+  const store = new PressureStore();
+  store.setRisk('mint', { liquidityUsd: 20000, holderConcentrationPct: 10, walletRisk: 'low' });
+  store.setRisk('mint', { liquidityUsd: '', holderConcentrationPct: -1, walletRisk: 'unknown' });
+  const result = store.analyse('mint');
+  assert.equal(result.liquidityOk, false);
+  assert.equal(result.concentrationOk, false);
+  assert.notEqual(result.signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+});
