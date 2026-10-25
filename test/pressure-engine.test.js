@@ -36,3 +36,17 @@ test('buy alert remains blocked when any critical risk gate is unknown', () => {
   assert.notEqual(analysePressure({ ...base, holderConcentrationPct: null }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
   assert.notEqual(analysePressure({ ...base, walletRisk: 'unknown' }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
 });
+
+test('near-simultaneous price snapshots do not count as confirmation', () => {
+  const trades = [
+    ...Array.from({length: 4}, (_, i) => ({ side: 'buy', usdValue: 100, timestamp: now - 240000 + i * 1000 })),
+    ...Array.from({length: 10}, (_, i) => ({ side: 'buy', usdValue: 150, timestamp: now - 50000 + i * 100 }))
+  ];
+  const snapshots = [{ timestamp: now - 1000, priceUsd: 1 }, { timestamp: now, priceUsd: 1.1 }];
+  const result = analysePressure({
+    trades, snapshots, now, liquidityUsd: 20000,
+    holderConcentrationPct: 20, walletRisk: 'low'
+  });
+  assert.notEqual(result.signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+  assert.ok(result.reasons.some(reason => reason.includes('price confirmation')));
+});
