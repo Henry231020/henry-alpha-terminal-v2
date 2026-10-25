@@ -72,6 +72,16 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <div class="card"><div class="label">PUMPPORTAL</div><div class="value" id="pumpStatus">—</div></div>
     <div class="card"><div class="label">LAST MARKET REFRESH</div><div class="value" style="font-size:15px" id="refreshTime">Waiting…</div></div>
   </section>
+  <section class="panel" style="margin-bottom:18px;padding:14px 16px">
+    <div class="panel-head" style="padding:0 0 10px;border:0"><h2>LIVE TRADE FEED DIAGNOSTICS</h2><span class="pill" id="tradeFeedState">Waiting for status</span></div>
+    <div class="detail-grid" style="margin:0">
+      <div class="detail-stat"><div class="label">MESSAGES RECEIVED</div><div class="value" id="feedMessages">—</div></div>
+      <div class="detail-stat"><div class="label">VALID TRADE MESSAGES</div><div class="value" id="feedValidTrades">—</div></div>
+      <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
+      <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
+    </div>
+    <div class="muted" style="margin-top:10px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
+  </section>
 
   <div class="controls">
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
@@ -239,6 +249,13 @@ async function refreshAll(){
     state.tokens=list.tokens||[];
     state.events=events||[];
     $('pumpStatus').textContent=status.pumpPortal||'—';
+    $('tradeFeedState').textContent=status.tradeFeed||'—';
+    const fd=status.feedDiagnostics||{};
+    $('feedMessages').textContent=number(fd.messagesReceived);
+    $('feedValidTrades').textContent=number(fd.validTradeMessages);
+    $('feedRejectedTrades').textContent=number(fd.rejectedTradeCandidates);
+    $('feedMalformed').textContent=number(fd.malformedJsonMessages);
+    $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid trade: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+'. Live format not independently verified.';
     $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
     renderTokens();renderEvents();
     if(state.selectedMint){
