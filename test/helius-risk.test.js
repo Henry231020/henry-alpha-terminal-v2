@@ -20,20 +20,21 @@ test('invalid mint returns unknown risk', async () => {
   assert.equal(result.holderCount, null);
 });
 
-test('fails closed when holder account sample is paginated', async () => {
+test('fails closed when holder account page is incomplete', async () => {
   const client = createHeliusRiskClient({
     apiKey: 'test',
     fetchImpl: async (_url, options) => {
       const body = JSON.parse(options.body);
       assert.equal(body.method, 'getTokenAccounts');
-      return { ok: true, json: async () => ({ result: { token_accounts: [{ amount: '90' }, { amount: '5' }, { amount: '5' }] } }) };
+      assert.equal(body.params.page, 1);
+      return { ok: true, json: async () => ({ result: { token_accounts: [{ owner: 'wallet-a', amount: '90' }, { owner: 'wallet-b', amount: '5' }, { owner: 'wallet-c', amount: '5' }] } }) };
     }
   });
   const result = await client.getHolderRisk('So11111111111111111111111111111111111111112');
-  assert.equal(result.status, 'unknown');
+  assert.equal(result.status, 'observed');
   assert.equal(result.holderCount, 3);
-  assert.equal(result.top10ConcentrationPct, null);
-  assert.match(result.reason, /page limit/);
+  assert.equal(result.top10ConcentrationPct, 100);
+  assert.match(result.reason, /All holder-account pages retrieved/);
 });
 
 test('HTTP errors fail closed as unknown', async () => {
