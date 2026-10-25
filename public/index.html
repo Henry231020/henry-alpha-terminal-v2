@@ -193,7 +193,7 @@ function renderDetail(t,events=[],notes={}){
     '<div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">'+
     (t.dexUrl?'<a href="'+escapeHtml(t.dexUrl)+'" target="_blank" rel="noopener noreferrer">Open DexScreener ↗</a>':'')+
     '<a href="https://solscan.io/token/'+encodeURIComponent(t.mint)+'" target="_blank" rel="noopener noreferrer">Open Solscan ↗</a></div>'+
-    '<div class="notice" style="margin-top:16px;font-size:12px">Pressure signals, risk scoring, historical candles and full live trades are not implemented in this dashboard version. Do not interpret missing data as zero risk.</div>'+
+    '<div id="pressurePanel" class="notice" style="margin-top:16px;font-size:12px">Loading observed buy/sell pressure… Unknown risk data will never pass the buy-alert gates.</div>'+
     '<h3 style="font-size:13px;margin-top:20px">DISCOVERY HISTORY</h3>'+
     (events.length?events.slice(0,8).map(e=>'<div class="event"><strong>'+escapeHtml((e.data||{}).txType||'Event')+'</strong><div class="muted">'+escapeHtml(dateText(e.receivedAt))+'</div></div>').join(''):'<div class="muted">No matching discovery events in the current server memory.</div>')+
     '<div class="muted" style="margin-top:12px">Market data: '+escapeHtml(notes.market||'Latest available snapshot')+'</div>';
@@ -207,6 +207,16 @@ async function selectToken(mint){
   try{
     const result=await api('/api/token/'+encodeURIComponent(mint));
     renderDetail(result.token,result.recentEvents||[],result.dataNotes||{});
+    try {
+      const pressure = await api('/api/pressure?mint='+encodeURIComponent(mint));
+      const panel = $('pressurePanel');
+      if(panel) {
+        const a = pressure.analysis || {};
+        const m = a.metrics || {};
+        panel.innerHTML = '<strong>PRESSURE SIGNAL: '+escapeHtml(a.signal||'WAIT')+'</strong><br>Buy volume (last 60s): '+escapeHtml(money(m.buyUsd))+' · Sell volume: '+escapeHtml(money(m.sellUsd))+'<br>Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>Wallet risk: '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+escapeHtml((a.reasons||[]).join(' '))+'<br><span class="muted">Observed data only · alert-only · automatic trading disabled</span>';
+      }
+    } catch (_) {}
+
   }catch(e){
     const t=state.tokens.find(x=>x.mint===mint);
     renderDetail(t,[]);
