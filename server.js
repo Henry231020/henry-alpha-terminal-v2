@@ -7,6 +7,8 @@ const WebSocket = require('ws');
 const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
 const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
+const { createHeliusRiskClient } = require('./lib/helius-risk');
+const heliusRisk = createHeliusRiskClient();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
 let tradeSubscriptions = null;
@@ -393,12 +395,27 @@ const server = http.createServer(async (req, res) => {
       marketCache: marketCache.getStats(),
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
+      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
       solUsdPrice,
       pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
       persistence: 'in-memory only; database integration still required'
     });
+  }
+
+  if (url.pathname.startsWith('/api/risk/')) {
+    const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
+    if (!mint) return sendJson(res, 400, { error: 'mint required' });
+    const risk = await heliusRisk.getHolderRisk(mint);
+    if (risk.status === 'observed') {
+      pressureStore.setRisk(mint, {
+        liquidityUsd: (tokens.get(mint) || {}).liquidityUsd,
+        holderConcentrationPct: risk.top10ConcentrationPct,
+        walletRisk: 'unknown'
+      });
+    }
+    return sendJson(res, 200, { mint, risk, automaticTrading: false });
   }
 
   if (url.pathname === '/api/pressure') {
