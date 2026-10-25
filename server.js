@@ -4,6 +4,8 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
+const { MarketCache } = require('./lib/market-cache');
+const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -128,6 +130,9 @@ function addEvent(payload) {
 }
 
 async function fetchDexPairs(mint) {
+  const cached = marketCache.get(mint);
+  if (cached) return cached;
+  if (!marketCache.canRequest()) throw new Error('DexScreener rate-limit cooldown active');
   const response = await fetch(
     `https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`,
     {
@@ -136,6 +141,7 @@ async function fetchDexPairs(mint) {
     }
   );
 
+  marketCache.noteStatus(response.status);
   if (!response.ok) {
     throw new Error(`DexScreener HTTP ${response.status}`);
   }
@@ -151,7 +157,7 @@ async function fetchDexPairs(mint) {
 
   const pair = pairs[0];
 
-  return {
+  const market = {
     priceUsd: safeNumber(pair.priceUsd),
     marketCapUsd: safeNumber(pair.marketCap) ?? safeNumber(pair.fdv),
     liquidityUsd: safeNumber(pair.liquidity?.usd),
@@ -172,6 +178,8 @@ async function fetchDexPairs(mint) {
     source: 'DexScreener',
     checkedAt: new Date().toISOString()
   };
+  marketCache.set(mint, market);
+  return market;
 }
 
 async function refreshOneToken(mint) {
@@ -317,6 +325,7 @@ const server = http.createServer(async (req, res) => {
       dexScreener: 'market lookups enabled',
       lastDexRefresh,
       dexErrors,
+      marketCache: marketCache.getStats(),
       automaticTrading: false,
       persistence: 'in-memory only; database integration still required'
     });
