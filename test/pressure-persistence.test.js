@@ -26,7 +26,7 @@ test('writes and reads use parameterized SQL and bounded limits', async () => {
   const rows = await store.recent('mint', 99999);
   assert.equal(rows.length, 1);
   assert.equal(calls[3].args[1], 1000);
-  assert.match(calls[1].sql, /\$1/);
+  assert.match(calls[2].sql, /\$1/);
 });
 
 test('invalid observation kind is rejected', async () => {
