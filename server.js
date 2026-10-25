@@ -479,8 +479,7 @@ const server = http.createServer(async (req, res) => {
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
     const risk = await heliusRisk.getHolderRisk(mint);
     if (risk.status === 'observed') {
-      pressureStore.setRisk(mint, {
-        liquidityUsd: (tokens.get(mint) || {}).liquidityUsd,
+      pressureStore.updateHolderRisk(mint, {
         holderConcentrationPct: risk.top10ConcentrationPct,
         walletRisk: 'unknown'
       });
