@@ -170,6 +170,39 @@ function subscribeMintTrades(mint) {
   if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
 }
 
+const pendingTrades = [];
+const MAX_PENDING_TRADES = 500;
+const ALERT_COOLDOWN_MS = 30000;
+
+function recordTradeAtPrice(item, price) {
+  const { mint, side, solAmount, wallet, timestamp } = item;
+  const usdValue = solAmount * price;
+  const trade = { side, timestamp, usdValue, wallet };
+  const accepted = pressureStore.recordTrade(mint, trade);
+  if (!accepted) {
+    feedDiagnostics.recordStoreRejected();
+    return;
+  }
+  feedDiagnostics.recordTradeRecorded(new Date(timestamp).toISOString());
+  persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
+  const analysis = pressureStore.analyse(mint);
+  if (alertedPressure.size > 5000) {
+    for (const [key, lastAt] of alertedPressure) {
+      if (timestamp - lastAt > 10 * 60 * 1000) alertedPressure.delete(key);
+      if (alertedPressure.size <= 4000) break;
+    }
+  }
+  const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
+  const previous = alertedPressure.get(mint);
+  if (isAlertSignal && (!previous || timestamp - previous > ALERT_COOLDOWN_MS)) {
+    alertedPressure.set(mint, timestamp);
+    const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
+    persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
+    broadcast({ type: 'pressure-alert', mint, ...alert });
+  }
+  broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
+}
+
 function processTradeMessage(data) {
   const parsedTrade = parseTradeMessage(data);
   if (!parsedTrade.ok) {
@@ -177,39 +210,27 @@ function processTradeMessage(data) {
     return false;
   }
   feedDiagnostics.recordValidTrade();
-  const { mint, side, solAmount, wallet } = parsedTrade.trade;
-  const now = Date.now();
+  const item = { ...parsedTrade.trade, timestamp: Date.now() };
   getSolUsdPrice().then(price => {
     if (!price) {
       feedDiagnostics.recordPriceUnavailable();
+      // Retain a bounded queue so a temporary price-provider outage does not
+      // discard otherwise valid trades. Expire old items before retrying.
+      const cutoff = Date.now() - 5 * 60 * 1000;
+      while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
+      if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
+      pendingTrades.push(item);
       return;
     }
-    // Use the validated, normalized side returned by parseTradeMessage.
-    const usdValue = solAmount * price;
-    const trade = { side, timestamp: now, usdValue, wallet };
-    const accepted = pressureStore.recordTrade(mint, trade);
-    if (!accepted) {
-      feedDiagnostics.recordStoreRejected();
-      return;
-    }
-    feedDiagnostics.recordTradeRecorded(new Date(now).toISOString());
-    persistence.save(mint, 'trade', now, trade).catch(() => {});
-    const analysis = pressureStore.analyse(mint);
-    // Prune stale cooldown entries and cap memory use on long-running monitors.
-    if (alertedPressure.size > 5000) {
-      for (const [mint, lastAt] of alertedPressure) {
-        if (now - lastAt > 10 * 60 * 1000) alertedPressure.delete(mint);
-        if (alertedPressure.size <= 4000) break;
-      }
-    }
-    const previous = alertedPressure.get(mint);
-    if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
-      alertedPressure.set(mint, now);
-      const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() };
-      persistence.save(mint, 'alert', now, alert).catch(() => {});
-      broadcast({ type: 'pressure-alert', mint, ...alert });
-    }
-    broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(now).toISOString(), analysis });
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
+    const queued = pendingTrades.splice(0, pendingTrades.length);
+    for (const pending of queued) recordTradeAtPrice(pending, price);
+    recordTradeAtPrice(item, price);
+  }).catch(() => {
+    feedDiagnostics.recordPriceUnavailable();
+    if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
+    pendingTrades.push(item);
   });
   return true;
 }
