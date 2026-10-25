@@ -432,8 +432,8 @@ const server = http.createServer(async (req, res) => {
     const mint = url.searchParams.get('mint');
     if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 25)));
-    const rows = await persistence.recent(mint, Math.min(1000, limit * 4));
-    const alerts = rows.filter(row => row.kind === 'alert').slice(0, limit).map(row => ({
+    const rows = await persistence.recentAlerts(mint, limit);
+    const alerts = rows.map(row => ({
       mint,
       observedAt: row.observed_at,
       ...(row.payload || {})
