@@ -12,6 +12,7 @@ const pressureStore = new PressureStore();
 let tradeSubscriptions = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
+let solUsdRequest = null;
 let tradeFeedStatus = 'waiting for API key';
 const alertedPressure = new Map();
 
@@ -140,7 +141,8 @@ function addEvent(payload) {
 
 async function getSolUsdPrice() {
   if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return solUsdPrice;
-  try {
+  if (solUsdRequest) return solUsdRequest;
+  solUsdRequest = (async () => { try {
     const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
     if (!response.ok) return null;
     const body = await response.json();
