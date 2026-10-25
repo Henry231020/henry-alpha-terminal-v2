@@ -42,6 +42,11 @@ let totalEvents = 0;
 const feedDiagnostics = createFeedDiagnostics();
 let lastDexRefresh = null;
 let dexErrors = 0;
+let dexCooldownSkips = 0;
+let dexNoPairResults = 0;
+let dexHttpErrors = 0;
+let dexNetworkErrors = 0;
+let dexLastError = null;
 let refreshInProgress = false;
 
 function sendJson(res, status, value) {
@@ -228,7 +233,10 @@ async function fetchDexPairs(mint) {
 
   const pairs = await response.json();
 
-  if (!Array.isArray(pairs) || !pairs.length) return null;
+  if (!Array.isArray(pairs) || !pairs.length) {
+    dexNoPairResults++;
+    return null;
+  }
 
   pairs.sort((a, b) =>
     (Number(b?.liquidity?.usd) || 0) -
@@ -286,10 +294,17 @@ async function refreshOneToken(mint) {
     pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
+    const message = String(error && error.message || 'Unknown DEX error');
+    dexLastError = { message, at: new Date().toISOString() };
+    if (message.includes('rate-limit cooldown active')) {
+      dexCooldownSkips++;
+      return;
+    }
     dexErrors++;
-
+    if (message.startsWith('DexScreener HTTP ')) dexHttpErrors++;
+    else dexNetworkErrors++;
     if (dexErrors < 5 || dexErrors % 25 === 0) {
-      console.error('DexScreener refresh failed:', error.message);
+      console.error('DexScreener refresh failed:', message);
     }
   }
 }
@@ -423,6 +438,7 @@ const server = http.createServer(async (req, res) => {
       dexScreener: 'market lookups enabled',
       lastDexRefresh,
       dexErrors,
+      dexDiagnostics: { httpErrors: dexHttpErrors, networkErrors: dexNetworkErrors, cooldownSkips: dexCooldownSkips, noPairResults: dexNoPairResults, lastError: dexLastError },
       marketCache: marketCache.getStats(),
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
