@@ -33,7 +33,7 @@ test('fails closed when holder account sample is paginated', async () => {
   assert.equal(result.status, 'unknown');
   assert.equal(result.holderCount, 3);
   assert.equal(result.top10ConcentrationPct, null);
-  assert.match(result.reason, /paginated account sample/);
+  assert.match(result.reason, /page limit/);
 });
 
 test('HTTP errors fail closed as unknown', async () => {
