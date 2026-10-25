@@ -6,8 +6,14 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
+const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
+let tradeSubscriptions = null;
+let solUsdPrice = null;
+let solUsdCheckedAt = 0;
+let tradeFeedStatus = 'waiting for API key';
+const alertedPressure = new Map();
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -123,12 +129,51 @@ function addEvent(payload) {
   }
 
   const token = upsertFromEvent(event);
+  if (token && token.mint) subscribeMintTrades(token.mint);
 
   broadcast({
     type: 'provider-event',
     ...event,
     token
   });
+}
+
+async function getSolUsdPrice() {
+  if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return solUsdPrice;
+  try {
+    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
+    if (!response.ok) return null;
+    const body = await response.json();
+    const price = safeNumber(body?.solana?.usd);
+    if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); }
+    return price;
+  } catch (_) { return null; }
+}
+
+function subscribeMintTrades(mint) {
+  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
+}
+
+function processTradeMessage(data) {
+  if (!data || typeof data.mint !== 'string' || !['buy', 'sell'].includes(String(data.txType || '').toLowerCase())) return false;
+  const solAmount = safeNumber(data.solAmount);
+  if (solAmount === null || solAmount < 0) return false;
+  const now = Date.now();
+  getSolUsdPrice().then(price => {
+    if (!price) return;
+    const side = String(data.txType).toLowerCase();
+    const usdValue = solAmount * price;
+    const accepted = pressureStore.recordTrade(data.mint, { side, timestamp: now, usdValue, wallet: data.traderPublicKey || null });
+    if (!accepted) return;
+    const analysis = pressureStore.analyse(data.mint);
+    const previous = alertedPressure.get(data.mint);
+    if (analysis.signal === 'URGENT_SELL' && (!previous || now - previous > 30000)) {
+      alertedPressure.set(data.mint, now);
+      broadcast({ type: 'pressure-alert', mint: data.mint, signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() });
+    }
+    broadcast({ type: 'trade-observation', mint: data.mint, side, usdValue, receivedAt: new Date(now).toISOString(), analysis });
+  });
+  return true;
 }
 
 async function fetchDexPairs(mint) {
@@ -246,7 +291,8 @@ function connectPumpPortal() {
 
   console.log('Connecting to PumpPortal...');
 
-  const socket = new WebSocket(PUMP_URL);
+  const socketUrl = process.env.PUMPPORTAL_API_KEY ? PUMP_URL + '?api-key=' + encodeURIComponent(process.env.PUMPPORTAL_API_KEY) : PUMP_URL;
+  const socket = new WebSocket(socketUrl);
   pumpSocket = socket;
 
   socket.on('open', () => {
@@ -257,6 +303,11 @@ function connectPumpPortal() {
 
     socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
     socket.send(JSON.stringify({ method: 'subscribeMigration' }));
+    tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
+    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
+    if (process.env.PUMPPORTAL_API_KEY) {
+      for (const mint of tokens.keys()) tradeSubscriptions.subscribe(mint);
+    }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
 
@@ -270,7 +321,9 @@ function connectPumpPortal() {
 
   socket.on('message', raw => {
     try {
-      addEvent(JSON.parse(raw.toString()));
+      const parsed = JSON.parse(raw.toString());
+      if (processTradeMessage(parsed)) return;
+      addEvent(parsed);
     } catch (_) {
       console.error('Ignored invalid PumpPortal message');
     }
@@ -284,6 +337,8 @@ function connectPumpPortal() {
     if (pumpSocket !== socket) return;
 
     pumpStatus = 'disconnected';
+    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'disconnected' : 'disabled: API key required';
+    tradeSubscriptions = null;
 
     broadcast({
       type: 'status',
@@ -333,7 +388,10 @@ const server = http.createServer(async (req, res) => {
       dexErrors,
       marketCache: marketCache.getStats(),
       pressureObservations: pressureStore.getStats(),
-      pressureEngine: 'waiting for verified live trade feed and wallet-risk inputs',
+      tradeFeed: tradeFeedStatus,
+      tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
+      solUsdPrice,
+      pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
       persistence: 'in-memory only; database integration still required'
     });
