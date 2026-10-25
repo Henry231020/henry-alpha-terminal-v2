@@ -167,7 +167,7 @@ function processTradeMessage(data) {
     if (!accepted) return;
     const analysis = pressureStore.analyse(data.mint);
     const previous = alertedPressure.get(data.mint);
-    if (analysis.signal === 'URGENT_SELL' && (!previous || now - previous > 30000)) {
+    if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
       alertedPressure.set(data.mint, now);
       broadcast({ type: 'pressure-alert', mint: data.mint, signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(now).toISOString() });
     }
