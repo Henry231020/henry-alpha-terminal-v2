@@ -5,7 +5,9 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const { MarketCache } = require('./lib/market-cache');
+const { PressureStore } = require('./lib/pressure-store');
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
+const pressureStore = new PressureStore();
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -198,6 +200,10 @@ async function refreshOneToken(mint) {
     };
 
     tokens.set(mint, merged);
+    if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
+      pressureStore.recordSnapshot(mint, { timestamp: Date.now(), priceUsd: merged.priceUsd });
+    }
+    pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
     dexErrors++;
@@ -326,9 +332,17 @@ const server = http.createServer(async (req, res) => {
       lastDexRefresh,
       dexErrors,
       marketCache: marketCache.getStats(),
+      pressureObservations: pressureStore.getStats(),
+      pressureEngine: 'waiting for verified live trade feed and wallet-risk inputs',
       automaticTrading: false,
       persistence: 'in-memory only; database integration still required'
     });
+  }
+
+  if (url.pathname === '/api/pressure') {
+    const mint = url.searchParams.get('mint');
+    if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), store: pressureStore.getStats() });
+    return sendJson(res, 200, { store: pressureStore.getStats(), automaticTrading: false, note: 'Per-token pressure data requires verified trade observations; this endpoint does not invent signals.' });
   }
 
   if (url.pathname === '/events' || url.pathname === '/api/events') {
@@ -395,6 +409,10 @@ const server = http.createServer(async (req, res) => {
         };
 
         tokens.set(mint, merged);
+        if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
+          pressureStore.recordSnapshot(mint, { timestamp: Date.now(), priceUsd: merged.priceUsd });
+        }
+        pressureStore.setRisk(mint, { liquidityUsd: merged.liquidityUsd, walletRisk: 'unknown', holderConcentrationPct: null });
 
         return sendJson(res, 200, {
           token: merged,
