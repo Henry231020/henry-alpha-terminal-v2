@@ -20,7 +20,7 @@ test('invalid mint returns unknown risk', async () => {
   assert.equal(result.holderCount, null);
 });
 
-test('computes account concentration and warns it is not beneficial-owner proof', async () => {
+test('fails closed when holder account sample is paginated', async () => {
   const client = createHeliusRiskClient({
     apiKey: 'test',
     fetchImpl: async (_url, options) => {
@@ -30,10 +30,10 @@ test('computes account concentration and warns it is not beneficial-owner proof'
     }
   });
   const result = await client.getHolderRisk('So11111111111111111111111111111111111111112');
-  assert.equal(result.status, 'observed');
+  assert.equal(result.status, 'unknown');
   assert.equal(result.holderCount, 3);
-  assert.equal(result.top10ConcentrationPct, 100);
-  assert.match(result.reason, /not verified beneficial owner/);
+  assert.equal(result.top10ConcentrationPct, null);
+  assert.match(result.reason, /paginated account sample/);
 });
 
 test('HTTP errors fail closed as unknown', async () => {
