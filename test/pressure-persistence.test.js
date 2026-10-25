@@ -40,7 +40,7 @@ test('discovers persisted mints with a bounded parameterized query', async () =>
   const calls = [];
   const pool = { query: async (sql, args) => {
     calls.push({ sql, args });
-    if (sql.startsWith('SELECT DISTINCT mint')) return { rows: [{ mint: 'mint-a' }, { mint: '' }, { mint: 'mint-b' }] };
+    if (sql.startsWith('SELECT mint FROM pressure_observations GROUP BY mint')) return { rows: [{ mint: 'mint-a' }, { mint: '' }, { mint: 'mint-b' }] };
     return { rows: [] };
   } };
   const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
