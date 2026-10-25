@@ -176,6 +176,13 @@ function processTradeMessage(data) {
     if (!accepted) return;
     persistence.save(data.mint, 'trade', now, trade).catch(() => {});
     const analysis = pressureStore.analyse(data.mint);
+    // Prune stale cooldown entries and cap memory use on long-running monitors.
+    if (alertedPressure.size > 5000) {
+      for (const [mint, lastAt] of alertedPressure) {
+        if (now - lastAt > 10 * 60 * 1000) alertedPressure.delete(mint);
+        if (alertedPressure.size <= 4000) break;
+      }
+    }
     const previous = alertedPressure.get(data.mint);
     if (analysis.signal === 'URGENT DUMP PRESSURE' && (!previous || now - previous > 30000)) {
       alertedPressure.set(data.mint, now);
