@@ -69,3 +69,21 @@ test('holder-only risk updates preserve liquidity and fail closed on malformed c
   assert.equal(risk.holderConcentrationPct, null);
   assert.equal(risk.walletRisk, 'unknown');
 });
+
+
+test('price history retains more than ten minutes so EMA 50 can become ready', () => {
+  const now = 2_000_000_000;
+  const store = new PressureStore({ clock: () => now });
+  for (let minute = 0; minute < 55; minute++) {
+    assert.equal(store.recordSnapshot('mint', {
+      timestamp: now - (54 - minute) * 60_000,
+      priceUsd: 1 + minute / 100
+    }), true);
+  }
+  const snapshots = store.getSnapshots('mint');
+  assert.equal(snapshots.length, 55);
+  const { calculateIndicators } = require('../lib/indicators');
+  const result = calculateIndicators(snapshots);
+  assert.equal(result.ema50Ready, true);
+  assert.notEqual(result.ema50, null);
+});
