@@ -8,7 +8,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 - Helius standard WebSocket monitoring of Pump.fun and PumpSwap program logs, followed by confirmed transaction lookups for observed buy/sell activity.
 - DexScreener market snapshots with caching and rate-limit backoff.
 - Observed buy/sell pressure alerts with explicit data-quality and risk gates.
-- Helius-backed holder concentration lookup and standard WebSocket trade observation when a Helius API key is configured.
+- Helius-backed holder concentration, creator-wallet share, mint-authority and freeze-authority checks, plus standard WebSocket trade observation when a Helius API key is configured.
 - EMA 9/20/50 and RSI 14 from locally observed price samples grouped into UTC one-minute buckets.
 - Earliest observed buyer summaries from the subscribed trade feed.
 - Tablet-friendly dashboard, token details, Solscan and DexScreener links.
@@ -20,7 +20,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 - Early buyers means the earliest wallets observed by the Helius log/transaction parser after the token's first-seen event. It does not prove the first on-chain buyers. The parser estimates trade size from signer SOL balance changes, so values may include rent or other transaction effects.
 - EMA/RSI values are calculated from sampled DexScreener prices grouped into UTC minute buckets, not exchange-native historical OHLCV. The server retains up to six hours of samples; indicators remain unavailable until enough observations exist.
 - PumpPortal launch/migration events are discovery notifications, not a complete transaction tape. Helius standard logs are used for Pump.fun and PumpSwap trade observations; transactions that cannot be reliably parsed are skipped.
-- Holder concentration is not a complete token-safety verdict. Unknown or partial risk data must remain unknown.
+- Holder concentration, creator share, and SPL mint/freeze authority checks are only partial risk indicators. Token-2022 extensions, liquidity lock/burn, insider clusters, and wallet/scam reputation are not fully assessed. Unknown or partial risk data must remain unknown; the wallet-risk gate therefore stays closed.
 - The app is a long-running Node.js service. A static website or serverless function alone cannot keep its outbound PumpPortal WebSocket open continuously.
 
 ## Run
@@ -34,7 +34,7 @@ npm start
 
 Open the dashboard at `http://localhost:3000`.
 
-## Container deployment\n\nA production-ready `Dockerfile` is included. Build and run it on an always-on Linux host with Docker. Set secrets as environment variables in the host dashboard; do not bake them into the image. Configure a persistent PostgreSQL database if observation history must survive container restarts.\n\n**Hosting warning:** many free web-hosting plans sleep when idle or impose short runtime limits. That disconnects the PumpPortal WebSocket and causes missed launches/trades. A static site host or a sleeping free web service is not suitable for continuous monitoring. Confirm the host is always-on and check its current costs before deploying.\n\n## Configuration
+## Container deployment\n\nA production-ready `Dockerfile` and `compose.yaml` are included. Compose runs the app and PostgreSQL with persistent storage and binds the dashboard only to `127.0.0.1:3000`. Use Tailscale Serve to expose it privately over HTTPS to your Android tablet; do not publish ports 3000 or 5432 to the public internet. Set secrets in a private `.env` file, never in GitHub.\n\n**Hosting warning:** many free web-hosting plans sleep when idle or impose short runtime limits. That disconnects the PumpPortal WebSocket and causes missed launches/trades. A static site host or a sleeping free web service is not suitable for continuous monitoring. Confirm the host is always-on and check its current costs before deploying.\n\n## Configuration
 
 Copy `.env.example` into a local `.env` file or set the variables in your hosting provider. Never commit real credentials.
 
