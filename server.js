@@ -13,8 +13,10 @@ const { calculateIndicators } = require('./lib/indicators');
 const { createRateLimiter } = require('./lib/rate-limit');
 const { createHeliusTradeStream } = require('./lib/helius-trade-stream');
 const { createRugCheckClient } = require('./lib/rugcheck-risk');
+const { fromEnvironment: createPaperTraderFromEnvironment } = require('./lib/paper-trader');
 const heliusRisk = createHeliusRiskClient();
 const rugCheck = createRugCheckClient();
+const paperTrader = createPaperTraderFromEnvironment();
 const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
@@ -449,6 +451,8 @@ async function refreshOneToken(mint) {
       persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
     pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+    const paperEvents = paperTrader.onMarketUpdate({ mint, priceUsd: merged.priceUsd, analysis: pressureStore.analyse(mint), now: Date.now() });
+    for (const event of paperEvents) broadcast({ type: 'paper-trade', ...event });
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
     const message = String(error && error.message || 'Unknown DEX error');
@@ -593,6 +597,7 @@ const server = http.createServer(async (req, res) => {
       persistence: persistence.status(),
       heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
       riskQueue: { queued: riskQueue.length, inFlight: riskRequests.size, maxQueued: MAX_RISK_QUEUE },
+      paperTrading: paperTrader.summary(),
       solUsdPrice,
       pressureEngine: 'Helius standard logs + confirmed transaction balance changes + RugCheck cached risk reports; BUY signals remain risk-gated',
       automaticTrading: false,
@@ -611,6 +616,10 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 429, { ok: false, error: 'Risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: result.retryAfterSeconds });
     }
     return sendJson(res, 200, { mint, risk: result.risk, automaticTrading: false });
+  }
+
+  if (url.pathname === '/api/paper') {
+    return sendJson(res, 200, paperTrader.summary());
   }
 
   if (url.pathname === '/api/alerts') {
