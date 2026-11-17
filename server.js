@@ -530,19 +530,18 @@ const server = http.createServer(async (req, res) => {
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
     const token = tokens.get(mint);
     const risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey });
-    if (risk.status === 'observed' || risk.mintAuthority && risk.mintAuthority.status === 'observed') {
-      const riskState = {
-        holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
-        creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
-        mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
-        freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
-        mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
-        tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
-        walletRisk: 'unknown'
-      };
-      pressureStore.updateHolderRisk(mint, riskState);
-      persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
-    }
+    const riskState = {
+      holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
+      creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
+      mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
+      freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
+      mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
+      tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
+      walletRisk: 'unknown'
+    };
+    // Every refresh replaces the prior measurements; provider failures reset gates to unknown.
+    pressureStore.updateHolderRisk(mint, riskState);
+    persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
     return sendJson(res, 200, { mint, risk, automaticTrading: false });
   }
 
