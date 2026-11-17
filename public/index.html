@@ -267,7 +267,7 @@ async function selectToken(mint){
           '<div class="event"><strong>'+escapeHtml(flag.level || 'unknown')+'</strong> · '+escapeHtml(flag.name || 'Risk flag')+' — '+escapeHtml(flag.description || '')+'</div>'
         ).join('') : '';
         panel.innerHTML += '<h4 style="margin:12px 0 6px">RUGCHECK WALLET & INSIDER CHECK</h4>' +
-          '<div>Wallet risk: <strong>'+escapeHtml(rugObserved ? String(rug.walletRisk || 'unknown').toUpperCase() : 'UNKNOWN')+'</strong></div>' +
+          '<div>RugCheck assessment: <strong>'+escapeHtml(rugObserved ? String(rug.walletRisk || 'unknown').toUpperCase() : 'UNKNOWN')+'</strong></div>' +
           '<div>RugCheck score (higher is worse): '+escapeHtml(rugScore)+'/100</div>' +
           '<div>Insider networks: '+escapeHtml(rugObserved ? number(rug.insiderNetworkCount) : 'Unknown')+' · Insider top holders: '+escapeHtml(rugObserved ? number(rug.insiderHolderCount) : 'Unknown')+'</div>' +
           '<div>Creator history: '+escapeHtml(rugObserved ? number(rug.creatorHistoryCount) : 'Unknown')+' · Metadata mutable: '+escapeHtml(rugObserved ? String(rug.metadataMutable) : 'Unknown')+'</div>' +
