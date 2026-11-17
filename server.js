@@ -259,7 +259,7 @@ function recordTradeAtPrice(item, price) {
 }
 
 function processObservedTrade(trade) {
-  if (!trade || !trade.mint || !['buy', 'sell'].includes(trade.side) || !Number.isFinite(Number(trade.solAmount)) || Number(trade.solAmount) <= 0) return false;
+  if (!trade || !trade.mint || !tokens.has(trade.mint) || !['buy', 'sell'].includes(trade.side) || !Number.isFinite(Number(trade.solAmount)) || Number(trade.solAmount) <= 0) return false;
   feedDiagnostics.recordValidTrade();
   const item = { ...trade, timestamp: Number(trade.timestamp) || Date.now() };
   getSolUsdPrice().then(price => {
