@@ -327,10 +327,15 @@ async function refreshRisk(mint) {
     let risk;
     let rugCheckRisk;
     try {
-      [risk, rugCheckRisk] = await Promise.all([
-        heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
-        rugCheck.getRisk(mint)
-      ]);
+      if (token && token.traderPublicKey) {
+        [risk, rugCheckRisk] = await Promise.all([
+          heliusRisk.getHolderRisk(mint, { creatorWallet: token.traderPublicKey }),
+          rugCheck.getRisk(mint)
+        ]);
+      } else {
+        rugCheckRisk = await rugCheck.getRisk(mint);
+        risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: rugCheckRisk.creator });
+      }
     } catch (_) {
       risk = { status: 'unknown', reason: 'Risk provider request failed', top10ConcentrationPct: null, creatorConcentrationPct: null, mintAuthority: { status: 'unknown' } };
       rugCheckRisk = { status: 'unknown', walletRisk: 'unknown', reason: 'RugCheck provider request failed' };
