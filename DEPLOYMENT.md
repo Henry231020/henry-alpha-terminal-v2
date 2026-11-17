@@ -10,14 +10,14 @@ This is the deployment plan for controlling HENRY ALPHA from an Android tablet w
 - **Private tablet access:** Tailscale Personal plan plus Tailscale Serve HTTPS. Only devices signed into the same private tailnet can reach the dashboard.
 - **Trading:** discovery, indicators, risk observations and alerts only. No wallet signer, Jupiter swap execution or automatic trading.
 
-This architecture aims for no monthly subscription. Oracle Always Free capacity and Helius free credits have limits; monitor usage and never select a paid resource by accident.
+This architecture aims for no monthly subscription. Important: Oracle can reclaim an Always Free compute instance if CPU, network, and memory utilisation all remain below its idle thresholds for seven days. A lightly loaded scanner may be at risk of reclamation, so Oracle is a free trial deployment candidate, not a guaranteed always-on host. Helius free credits also have limits. Monitor usage and never select a paid resource by accident. If uninterrupted hosting is essential and no free host meets the workload, an always-on VPS may cost money; do not approve one without checking first.
 
 ## One-time cloud setup
 
 1. Create an Oracle Cloud Free Tier account and a Linux ARM64 Ampere VM in the Always Free allowance. If the console says there is no capacity, wait or try another availability domain in the home region. Do not choose a paid shape.
 2. Add your SSH public key during VM creation. Keep the SSH private key private.
 3. Install Docker Engine and the Docker Compose plugin using Docker's official installation instructions.
-4. Install Tailscale on the VM using its official Linux instructions, then run `sudo tailscale up` and complete the sign-in page.
+4. Install Tailscale on the VM using its official Linux instructions, then run `sudo tailscale up` and complete the sign-in page. The Personal plan is free for personal use; confirm your account remains on that plan.
 5. In the Tailscale admin console, enable MagicDNS and HTTPS certificates. Tailscale Serve uses the private tailnet and provides an HTTPS address; it does not publish the app to the public internet.
 
 ## Configure HENRY ALPHA
@@ -47,7 +47,7 @@ docker compose ps
 docker compose logs --tail=100 app
 ```
 
-The app is published only on `127.0.0.1:3000` on the VM. The database has no public port.
+The app is published only on `127.0.0.1:3000` on the VM. The database has no public port. Tailscale Personal is $0 for personal use (up to six users); Serve provides private HTTPS within your tailnet.
 
 ## Private access from the Android tablet
 
