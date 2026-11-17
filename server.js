@@ -6,23 +6,22 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
-const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const { createHeliusRiskClient } = require('./lib/helius-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
-const { parseTradeMessage } = require('./lib/trade-message');
 const { calculateIndicators } = require('./lib/indicators');
 const { createRateLimiter } = require('./lib/rate-limit');
+const { createHeliusTradeStream } = require('./lib/helius-trade-stream');
 const heliusRisk = createHeliusRiskClient();
 const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
-let tradeSubscriptions = null;
+let heliusTradeStream = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
 let solUsdRequest = null;
-let tradeFeedStatus = 'waiting for API key';
+let tradeFeedStatus = process.env.HELIUS_API_KEY ? 'Helius stream not started' : 'disabled: HELIUS_API_KEY missing';
 const alertedPressure = new Map();
 
 const PORT = Number(process.env.PORT || 3000);
@@ -200,7 +199,6 @@ function addEvent(payload) {
 
   const token = upsertFromEvent(event);
   if (token && token.mint) {
-    subscribeMintTrades(token.mint);
     if (!token.image && token.uri) resolveTokenMetadata(token);
   }
 
@@ -225,9 +223,6 @@ async function getSolUsdPrice() {
     } catch (_) { return null; }
   })();
   try { return await solUsdRequest; } finally { solUsdRequest = null; }
-}
-function subscribeMintTrades(mint) {
-  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
 }
 
 const pendingTrades = [];
@@ -263,19 +258,13 @@ function recordTradeAtPrice(item, price) {
   broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
-function processTradeMessage(data) {
-  const parsedTrade = parseTradeMessage(data);
-  if (!parsedTrade.ok) {
-    if (parsedTrade.candidate) feedDiagnostics.recordRejected(parsedTrade.reason);
-    return false;
-  }
+function processObservedTrade(trade) {
+  if (!trade || !trade.mint || !['buy', 'sell'].includes(trade.side) || !Number.isFinite(Number(trade.solAmount)) || Number(trade.solAmount) <= 0) return false;
   feedDiagnostics.recordValidTrade();
-  const item = { ...parsedTrade.trade, timestamp: Date.now() };
+  const item = { ...trade, timestamp: Number(trade.timestamp) || Date.now() };
   getSolUsdPrice().then(price => {
     if (!price) {
       feedDiagnostics.recordPriceUnavailable();
-      // Retain a bounded queue so a temporary price-provider outage does not
-      // discard otherwise valid trades. Expire old items before retrying.
       const cutoff = Date.now() - 5 * 60 * 1000;
       while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
       if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
@@ -295,6 +284,13 @@ function processTradeMessage(data) {
   return true;
 }
 
+heliusTradeStream = createHeliusTradeStream({
+  onTrade: processObservedTrade,
+  onStatus: status => {
+    tradeFeedStatus = status;
+    broadcast({ type: 'trade-feed-status', provider: 'Helius standard Solana WebSocket', status, time: new Date().toISOString() });
+  }
+});
 async function fetchDexPairs(mint) {
   const cached = marketCache.get(mint);
   if (cached) return cached;
@@ -422,8 +418,7 @@ function connectPumpPortal() {
 
   console.log('Connecting to PumpPortal...');
 
-  const socketUrl = process.env.PUMPPORTAL_API_KEY ? PUMP_URL + '?api-key=' + encodeURIComponent(process.env.PUMPPORTAL_API_KEY) : PUMP_URL;
-  const socket = new WebSocket(socketUrl);
+  const socket = new WebSocket(PUMP_URL);
   pumpSocket = socket;
 
   socket.on('open', () => {
@@ -434,11 +429,6 @@ function connectPumpPortal() {
 
     socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
     socket.send(JSON.stringify({ method: 'subscribeMigration' }));
-    tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
-    if (process.env.PUMPPORTAL_API_KEY) {
-      for (const mint of tokens.keys()) tradeSubscriptions.subscribe(mint);
-    }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
 
@@ -454,7 +444,6 @@ function connectPumpPortal() {
     feedDiagnostics.recordMessage();
     try {
       const parsed = JSON.parse(raw.toString());
-      if (processTradeMessage(parsed)) return;
       addEvent(parsed);
     } catch (_) {
       feedDiagnostics.recordMalformedJson();
@@ -470,8 +459,6 @@ function connectPumpPortal() {
     if (pumpSocket !== socket) return;
 
     pumpStatus = 'disconnected';
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'disconnected' : 'disabled: API key required';
-    tradeSubscriptions = null;
 
     broadcast({
       type: 'status',
@@ -524,7 +511,7 @@ const server = http.createServer(async (req, res) => {
       feedDiagnostics: feedDiagnostics.snapshot(),
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       persistence: persistence.status(),
-      tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
+      heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
       solUsdPrice,
       pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
@@ -762,6 +749,7 @@ server.listen(PORT, HOST, () => {
     if (liveFeedsStarted) return;
     liveFeedsStarted = true;
     connectPumpPortal();
+    if (heliusTradeStream) heliusTradeStream.start();
     setInterval(refreshMarketData, DEX_REFRESH_MS);
   }
 
