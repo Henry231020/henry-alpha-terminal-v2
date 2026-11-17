@@ -531,7 +531,7 @@ const server = http.createServer(async (req, res) => {
     const token = tokens.get(mint);
     const risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey });
     if (risk.status === 'observed' || risk.mintAuthority && risk.mintAuthority.status === 'observed') {
-      pressureStore.updateHolderRisk(mint, {
+      const riskState = {
         holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
         creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
         mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
@@ -539,8 +539,9 @@ const server = http.createServer(async (req, res) => {
         mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
         tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
         walletRisk: 'unknown'
-      });
-      persistence.save(mint, 'risk', Date.now(), risk).catch(() => {});
+      };
+      pressureStore.updateHolderRisk(mint, riskState);
+      persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
     }
     return sendJson(res, 200, { mint, risk, automaticTrading: false });
   }
