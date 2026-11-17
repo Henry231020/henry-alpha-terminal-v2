@@ -576,12 +576,12 @@ const server = http.createServer(async (req, res) => {
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
       feedDiagnostics: feedDiagnostics.snapshot(),
-      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
+      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; background risk queue and on-demand checks' : 'not configured',
       persistence: persistence.status(),
       heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
       riskQueue: { queued: riskQueue.length, inFlight: riskRequests.size, maxQueued: MAX_RISK_QUEUE },
       solUsdPrice,
-      pressureEngine: 'Helius standard logs + confirmed transaction balance changes; BUY signals remain risk-gated',
+      pressureEngine: 'Helius standard logs + confirmed transaction balance changes + RugCheck cached risk reports; BUY signals remain risk-gated',
       automaticTrading: false,
       persistenceMode: persistence.status().mode
     });
@@ -590,6 +590,8 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/risk/')) {
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { error: 'valid mint required' });
+    const queuedIndex = riskQueue.indexOf(mint);
+    if (queuedIndex >= 0) { riskQueue.splice(queuedIndex, 1); riskQueued.delete(mint); }
     const result = await refreshRisk(mint);
     if (result && result.rateLimited) {
       res.setHeader('Retry-After', String(result.retryAfterSeconds));
