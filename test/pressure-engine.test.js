@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { analysePressure } = require('../lib/pressure-engine');
 const now = 1800000000000;
+const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 test('missing risk data cannot trigger buy alert', () => {
   const trades = Array.from({length: 10}, (_, i) => ({ side: 'buy', usdValue: 250, timestamp: now - 50000 + i * 100 }));
   const result = analysePressure({ trades, snapshots: [{timestamp:now-30000,priceUsd:1},{timestamp:now,priceUsd:1.1}], now });
@@ -30,11 +31,15 @@ test('buy alert remains blocked when any critical risk gate is unknown', () => {
     ...Array.from({length: 10}, (_, i) => ({ side: 'buy', usdValue: 150, timestamp: now - 50000 + i * 100 }))
   ];
   const snapshots = [{ timestamp: now - 30000, priceUsd: 1 }, { timestamp: now, priceUsd: 1.1 }];
-  const base = { trades, snapshots, now, liquidityUsd: 20000, holderConcentrationPct: 20, walletRisk: 'low' };
+  const base = { trades, snapshots, now, liquidityUsd: 20000, holderConcentrationPct: 20, creatorConcentrationPct: 10, mintAuthorityRevoked: true, freezeAuthorityRevoked: true, mintInitialized: true, tokenProgram: SPL_TOKEN_PROGRAM, walletRisk: 'low' };
   assert.equal(analysePressure(base).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
   assert.notEqual(analysePressure({ ...base, liquidityUsd: null }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
   assert.notEqual(analysePressure({ ...base, holderConcentrationPct: null }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
   assert.notEqual(analysePressure({ ...base, walletRisk: 'unknown' }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+  assert.notEqual(analysePressure({ ...base, mintAuthorityRevoked: false }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+  assert.notEqual(analysePressure({ ...base, freezeAuthorityRevoked: null }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+  assert.notEqual(analysePressure({ ...base, creatorConcentrationPct: 25 }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
+  assert.notEqual(analysePressure({ ...base, tokenProgram: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' }).signal, 'BUY PRESSURE CONFIRMED (ALERT ONLY)');
 });
 
 test('near-simultaneous price snapshots do not count as confirmation', () => {
