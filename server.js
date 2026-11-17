@@ -488,8 +488,6 @@ function connectPumpPortal() {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
   const url = new URL(
     req.url,
     `http://${req.headers.host || 'localhost'}`
