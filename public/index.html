@@ -260,6 +260,19 @@ async function selectToken(mint){
           '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — these checks do not prove a token is safe.</div>' +
           '<div class="muted">'+escapeHtml(risk.reason || 'Holder scan unavailable.')+'</div>' +
           '<div class="muted">'+escapeHtml(authority.reason || 'Mint authority data unavailable.')+'</div>';
+        const rug = risk.rugCheck || {};
+        const rugObserved = rug.status === 'observed';
+        const rugScore = rugObserved && rug.scoreNormalized !== null && rug.scoreNormalized !== undefined && Number.isFinite(Number(rug.scoreNormalized)) ? Number(rug.scoreNormalized).toFixed(1) : 'Unknown';
+        const riskFlags = Array.isArray(rug.riskFlags) ? rug.riskFlags.slice(0, 5).map(flag =>
+          '<div class="event"><strong>'+escapeHtml(flag.level || 'unknown')+'</strong> · '+escapeHtml(flag.name || 'Risk flag')+' — '+escapeHtml(flag.description || '')+'</div>'
+        ).join('') : '';
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">RUGCHECK WALLET & INSIDER CHECK</h4>' +
+          '<div>Wallet risk: <strong>'+escapeHtml(rugObserved ? String(rug.walletRisk || 'unknown').toUpperCase() : 'UNKNOWN')+'</strong></div>' +
+          '<div>RugCheck score (higher is worse): '+escapeHtml(rugScore)+'/100</div>' +
+          '<div>Insider networks: '+escapeHtml(rugObserved ? number(rug.insiderNetworkCount) : 'Unknown')+' · Insider top holders: '+escapeHtml(rugObserved ? number(rug.insiderHolderCount) : 'Unknown')+'</div>' +
+          '<div>Creator history: '+escapeHtml(rugObserved ? number(rug.creatorHistoryCount) : 'Unknown')+' · Metadata mutable: '+escapeHtml(rugObserved ? String(rug.metadataMutable) : 'Unknown')+'</div>' +
+          (riskFlags || '<div class="muted">'+escapeHtml(rug.reason || 'RugCheck report unavailable; wallet-risk gate remains closed.')+'</div>') +
+          '<div class="muted">RugCheck is a cached third-party risk report, not a guarantee of safety.</div>';
       }
     } catch (_) {
       const panel = $('pressurePanel');
