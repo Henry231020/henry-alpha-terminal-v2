@@ -8,7 +8,7 @@ This is the deployment plan for controlling HENRY ALPHA from an Android tablet w
 - **Runtime:** Docker Compose. The Node.js scanner and PostgreSQL database restart automatically and PostgreSQL data persists in a Docker volume.
 - **Chain data:** PumpPortal free launch/migration notifications plus Helius standard Solana WebSockets and confirmed transaction lookups. PumpPortal's metered trade-subscription endpoint is not used. Free RugCheck cached reports add token-risk and insider-network signals; no RugCheck API key is needed.
 - **Private tablet access:** Tailscale Personal plan plus Tailscale Serve HTTPS. Only devices signed into the same private tailnet can reach the dashboard.
-- **Trading:** discovery, indicators, risk observations and alerts only. No wallet signer, Jupiter swap execution or automatic trading.
+- **Trading:** discovery, indicators, risk observations and alerts. Optional paper-only simulation is disabled by default. No wallet signer, Jupiter swap execution or automatic trading.
 
 This architecture aims for no monthly subscription. Important: Oracle can reclaim an Always Free compute instance if CPU, network, and memory utilisation all remain below its idle thresholds for seven days. A lightly loaded scanner may be at risk of reclamation, so Oracle is a free trial deployment candidate, not a guaranteed always-on host. Helius free credits also have limits. Monitor usage and never select a paid resource by accident. If uninterrupted hosting is essential and no free host meets the workload, an always-on VPS may cost money; do not approve one without checking first.
 
@@ -78,4 +78,4 @@ The status endpoint must show PumpPortal connected and Helius standard logs conn
 - SOL trade size is estimated from signer balance changes and may include transaction effects. It is not an exact fill receipt.
 - Helius holder/mint checks and RugCheck's cached report are partial signals, not a full rug-pull guarantee. RugCheck free reports may be stale; unknown or incomplete data blocks buy alerts.
 - A VM, network, provider or database can still fail. The service reconnects to its feeds, but it cannot recover events missed while offline unless a later backfill is added.
-- Never import a funded wallet or enable live trading during initial deployment. We will validate the scanner and alerts first.
+- Never import a funded wallet or enable live trading during initial deployment. Paper simulation is also disabled until you choose its test parameters; it never uses a wallet. We will validate the scanner and alerts first.
