@@ -5,10 +5,10 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 ## Current build scope
 
 - PumpPortal launch and migration discovery over a persistent WebSocket.
-- Optional PumpPortal token-trade subscriptions for observed buy/sell activity.
+- Helius standard WebSocket monitoring of Pump.fun and PumpSwap program logs, followed by confirmed transaction lookups for observed buy/sell activity.
 - DexScreener market snapshots with caching and rate-limit backoff.
 - Observed buy/sell pressure alerts with explicit data-quality and risk gates.
-- Helius-backed holder concentration lookup when a Helius API key is configured.
+- Helius-backed holder concentration lookup and standard WebSocket trade observation when a Helius API key is configured.
 - EMA 9/20/50 and RSI 14 from locally observed price samples grouped into UTC one-minute buckets.
 - Earliest observed buyer summaries from the subscribed trade feed.
 - Tablet-friendly dashboard, token details, Solscan and DexScreener links.
@@ -17,9 +17,9 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 ## Important limitations
 
 - **No automatic trading is enabled.** This build does not sign transactions, connect to a trading wallet, or submit swaps.
-- Early buyers means the earliest wallets observed by the configured feed after the token's first-seen event. It does not prove the first on-chain buyers.
+- Early buyers means the earliest wallets observed by the Helius log/transaction parser after the token's first-seen event. It does not prove the first on-chain buyers. The parser estimates trade size from signer SOL balance changes, so values may include rent or other transaction effects.
 - EMA/RSI values are calculated from sampled DexScreener prices grouped into UTC minute buckets, not exchange-native historical OHLCV. The server retains up to six hours of samples; indicators remain unavailable until enough observations exist.
-- PumpPortal launch/migration events are not a complete transaction tape. Token-trade subscription access requires a valid `PUMPPORTAL_API_KEY`.
+- PumpPortal launch/migration events are discovery notifications, not a complete transaction tape. Helius standard logs are used for Pump.fun and PumpSwap trade observations; transactions that cannot be reliably parsed are skipped.
 - Holder concentration is not a complete token-safety verdict. Unknown or partial risk data must remain unknown.
 - The app is a long-running Node.js service. A static website or serverless function alone cannot keep its outbound PumpPortal WebSocket open continuously.
 
@@ -38,7 +38,7 @@ Open the dashboard at `http://localhost:3000`.
 
 Copy `.env.example` into a local `.env` file or set the variables in your hosting provider. Never commit real credentials.
 
-- `PUMPPORTAL_API_KEY`: optional for launch/migration discovery; required for token-trade subscriptions and observed wallet activity. Without it, early-buyer and trade-pressure features cannot populate.
+- `HELIUS_API_KEY`: used for standard Solana WebSocket logs and confirmed transaction lookups. The free plan has usage limits; monitor credit consumption.\n- PumpPortal is used only for its free token-creation and migration notifications. Its metered trade-subscription endpoint is not used.
 - `HELIUS_API_KEY`: optional holder-account enrichment.
 - `DATABASE_URL`: optional PostgreSQL persistence.
 - `PORT`: web server port.
