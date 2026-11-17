@@ -513,7 +513,7 @@ const server = http.createServer(async (req, res) => {
       persistence: persistence.status(),
       heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
       solUsdPrice,
-      pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
+      pressureEngine: 'Helius standard logs + confirmed transaction balance changes; BUY signals remain risk-gated',
       automaticTrading: false,
       persistenceMode: persistence.status().mode
     });
