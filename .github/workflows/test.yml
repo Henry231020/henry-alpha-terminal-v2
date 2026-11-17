@@ -18,3 +18,11 @@ jobs:
           node-version: 20
       - run: npm install --ignore-scripts
       - run: npm test
+
+      - name: Validate Docker Compose configuration
+        env:
+          HELIUS_API_KEY: ci-placeholder
+          POSTGRES_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: docker compose config --quiet
+      - name: Build production container
+        run: docker build --tag henry-alpha:test .
