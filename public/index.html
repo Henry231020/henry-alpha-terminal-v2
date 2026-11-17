@@ -248,7 +248,7 @@ async function selectToken(mint){
         const authority = risk.mintAuthority || {};
         const authorityStatus = authority.status === 'observed';
         const authorityText = value => !authorityStatus ? 'Unknown' : value ? 'Revoked' : 'ACTIVE';
-        const creatorPct = Number.isFinite(Number(risk.creatorConcentrationPct)) ? Number(risk.creatorConcentrationPct).toFixed(2)+'%' : 'Unknown';
+        const creatorPct = risk.creatorConcentrationPct !== null && risk.creatorConcentrationPct !== undefined && Number.isFinite(Number(risk.creatorConcentrationPct)) ? Number(risk.creatorConcentrationPct).toFixed(2)+'%' : 'Unknown';
         panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER & MINT AUTHORITY CHECK</h4>' +
           '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
           '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
