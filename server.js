@@ -12,7 +12,9 @@ const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { calculateIndicators } = require('./lib/indicators');
 const { createRateLimiter } = require('./lib/rate-limit');
 const { createHeliusTradeStream } = require('./lib/helius-trade-stream');
+const { createRugCheckClient } = require('./lib/rugcheck-risk');
 const heliusRisk = createHeliusRiskClient();
+const rugCheck = createRugCheckClient();
 const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
@@ -529,7 +531,11 @@ const server = http.createServer(async (req, res) => {
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
     const token = tokens.get(mint);
-    const risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey });
+    const [risk, rugCheckRisk] = await Promise.all([
+      heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
+      rugCheck.getRisk(mint)
+    ]);
+    risk.rugCheck = rugCheckRisk;
     const riskState = {
       holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
       creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
@@ -537,7 +543,7 @@ const server = http.createServer(async (req, res) => {
       freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
       mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
       tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
-      walletRisk: 'unknown'
+      walletRisk: rugCheckRisk.status === 'observed' ? rugCheckRisk.walletRisk : 'unknown'
     };
     // Every refresh replaces the prior measurements; provider failures reset gates to unknown.
     pressureStore.updateHolderRisk(mint, riskState);
