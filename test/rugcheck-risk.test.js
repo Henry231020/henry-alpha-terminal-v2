@@ -24,6 +24,12 @@ test('classifies only complete clean RugCheck reports as low wallet risk', () =>
   assert.equal(result.scoreNormalized, 10);
 });
 
+test('classic SPL report may omit Token-2022 extension object', () => {
+  const report = cleanReport();
+  delete report.token_extensions;
+  assert.equal(summarizeRugCheckReport(report).walletRisk, 'low');
+});
+
 test('danger scores and insider networks classify as high risk', () => {
   const danger = cleanReport();
   danger.risks = [{ name: 'Danger flag', level: 'danger', description: 'Danger' }];
