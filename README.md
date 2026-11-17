@@ -52,7 +52,7 @@ Copy `.env.example` into a local `.env` file or set the variables in your hostin
 - `GET /api/token/:mint` — token and latest market snapshot.
 - `GET /api/pressure?mint=:mint` — observed buy/sell pressure.
 - `GET /api/indicators/:mint` — sampled 1-minute EMA 9/20/50 and RSI 14.
-- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time. Requires the token-trade feed and records only wallets observed by that feed.\n- Holder-risk lookups are globally rate-limited to five requests per minute and cached per mint for five minutes to protect RPC quotas.
+- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time. Requires the token-trade feed and records only wallets observed by that feed.\n- Helius holder-risk lookups are globally rate-limited to five requests per minute and cached per mint for five minutes to protect RPC quotas. The background queue is bounded and exposes its depth in `/api/status`.
 - `GET /api/risk/:mint` — holder concentration observation.
 - `GET /api/alerts?mint=:mint` — persisted alert history when PostgreSQL is configured.
 
