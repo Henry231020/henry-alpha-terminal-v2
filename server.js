@@ -314,6 +314,7 @@ function queueRiskLookup(mint) {
   riskQueue.push(mint);
   riskQueued.add(mint);
   riskLastQueued.set(mint, Date.now());
+  if (riskLastQueued.size > 1000) riskLastQueued.delete(riskLastQueued.keys().next().value);
   return true;
 }
 
@@ -323,10 +324,17 @@ async function refreshRisk(mint) {
   if (!rate.allowed) return { rateLimited: true, retryAfterSeconds: rate.retryAfterSeconds };
   const pending = (async () => {
     const token = tokens.get(mint);
-    const [risk, rugCheckRisk] = await Promise.all([
-      heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
-      rugCheck.getRisk(mint)
-    ]);
+    let risk;
+    let rugCheckRisk;
+    try {
+      [risk, rugCheckRisk] = await Promise.all([
+        heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
+        rugCheck.getRisk(mint)
+      ]);
+    } catch (_) {
+      risk = { status: 'unknown', reason: 'Risk provider request failed', top10ConcentrationPct: null, creatorConcentrationPct: null, mintAuthority: { status: 'unknown' } };
+      rugCheckRisk = { status: 'unknown', walletRisk: 'unknown', reason: 'RugCheck provider request failed' };
+    }
     risk.rugCheck = rugCheckRisk;
     const riskState = {
       holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
