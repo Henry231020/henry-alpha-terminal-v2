@@ -574,7 +574,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
   }
 
-  const indicatorsMatch = url.pathname.match(/^\\/api\\/indicators\\/([^/]+)$/);
+  const indicatorsMatch = url.pathname.match(/^\/api\/indicators\/([^/]+)$/);
   if (indicatorsMatch) {
     const mint = decodeURIComponent(indicatorsMatch[1]);
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
@@ -582,7 +582,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { mint, ...indicators, automaticTrading: false });
   }
 
-  const earlyBuyersMatch = url.pathname.match(/^\\/api\\/early-buyers\\/([^/]+)$/);
+  const earlyBuyersMatch = url.pathname.match(/^\/api\/early-buyers\/([^/]+)$/);
   if (earlyBuyersMatch) {
     const mint = decodeURIComponent(earlyBuyersMatch[1]);
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
