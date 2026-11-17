@@ -11,6 +11,7 @@ const { createHeliusRiskClient } = require('./lib/helius-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
+const { calculateIndicators } = require('./lib/indicators');
 const heliusRisk = createHeliusRiskClient();
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
@@ -571,6 +572,25 @@ const server = http.createServer(async (req, res) => {
       analysis: pressureStore.analyse(token.mint)
     }));
     return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
+  }
+
+  const indicatorsMatch = url.pathname.match(/^\\/api\\/indicators\\/([^/]+)$/);
+  if (indicatorsMatch) {
+    const mint = decodeURIComponent(indicatorsMatch[1]);
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
+    const indicators = calculateIndicators(pressureStore.getSnapshots(mint));
+    return sendJson(res, 200, { mint, ...indicators, automaticTrading: false });
+  }
+
+  const earlyBuyersMatch = url.pathname.match(/^\\/api\\/early-buyers\\/([^/]+)$/);
+  if (earlyBuyersMatch) {
+    const mint = decodeURIComponent(earlyBuyersMatch[1]);
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
+    const token = tokens.get(mint);
+    const windowMs = Math.max(60000, Math.min(30 * 60 * 1000, Number(url.searchParams.get('windowMs')) || 10 * 60 * 1000));
+    const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 25));
+    const activity = pressureStore.getWalletActivity(mint, { launchAt: token && token.firstSeenAt, windowMs, limit });
+    return sendJson(res, 200, { mint, ...activity, tradeFeed: tradeFeedStatus, automaticTrading: false });
   }
 
   if (url.pathname === '/events' || url.pathname === '/api/events') {
