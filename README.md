@@ -13,6 +13,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 - Earliest observed buyer summaries from the subscribed trade feed.
 - Tablet-friendly dashboard, token details, Solscan and DexScreener links.
 - Optional PostgreSQL persistence for observations and alert history.
+- Optional paper-only position simulator with stop-loss, take-profit, trailing-stop, max-position and daily-loss controls. It is disabled by default and never signs or submits transactions.
 
 ## Important limitations
 
@@ -62,7 +63,7 @@ Copy `.env.example` into a local `.env` file or set the variables in your hostin
 npm test
 ```
 
-## Security
+## Paper trading\n\nPaper simulation is disabled unless `PAPER_TRADING_ENABLED=true` and every risk parameter is supplied in `.env`. It uses observed market prices and is not a realistic execution model: fees, slippage, priority fees and price impact are excluded. Open paper positions and balances are in memory and reset when the process restarts. Check `/api/paper` for its state.\n\n## Security
 
 - Do not put API keys, Telegram tokens, or wallet private keys in source code or GitHub.
 - Rotate any API key that has been posted into a chat or committed to a repository.
