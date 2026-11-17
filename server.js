@@ -12,7 +12,9 @@ const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
 const { calculateIndicators } = require('./lib/indicators');
+const { createRateLimiter } = require('./lib/rate-limit');
 const heliusRisk = createHeliusRiskClient();
+const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
@@ -533,6 +535,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname.startsWith('/api/risk/')) {
+    const rate = allowHolderRiskLookup();
+    if (!rate.allowed) {
+      res.setHeader('Retry-After', String(rate.retryAfterSeconds));
+      return sendJson(res, 429, { ok: false, error: 'Holder risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: rate.retryAfterSeconds });
+    }
+
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
     const risk = await heliusRisk.getHolderRisk(mint);
