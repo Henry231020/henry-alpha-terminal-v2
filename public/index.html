@@ -86,6 +86,19 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <div class="muted" style="margin-top:10px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
   </section>
 
+  <section class="panel" style="margin-bottom:18px;padding:14px 16px">
+    <div class="panel-head" style="padding:0 0 10px;border:0"><h2>PAPER SIMULATION</h2><span class="pill" id="paperState">Disabled</span></div>
+    <div class="detail-grid" style="margin:0">
+      <div class="detail-stat"><div class="label">VIRTUAL CASH</div><div class="value" id="paperCash">—</div></div>
+      <div class="detail-stat"><div class="label">EQUITY</div><div class="value" id="paperEquity">—</div></div>
+      <div class="detail-stat"><div class="label">REALIZED P/L</div><div class="value" id="paperRealized">—</div></div>
+      <div class="detail-stat"><div class="label">UNREALIZED P/L</div><div class="value" id="paperUnrealized">—</div></div>
+      <div class="detail-stat"><div class="label">OPEN POSITIONS</div><div class="value" id="paperOpenCount">—</div></div>
+    </div>
+    <div id="paperPositions" style="margin-top:10px"></div>
+    <div class="muted" style="margin-top:10px" id="paperNote">Paper simulation is disabled. It never uses a wallet or submits real transactions.</div>
+  </section>
+
   <div class="controls">
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
     <select id="sort">
@@ -331,6 +344,16 @@ async function refreshAll(){
     state.events=events||[];
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
+    const paper=status.paperTrading||{};
+    $('paperState').textContent=paper.enabled?'PAPER ONLY':'DISABLED';
+    $('paperCash').textContent=money(paper.cashUsd||0);
+    $('paperEquity').textContent=money(paper.equityUsd||0);
+    $('paperRealized').textContent=money(paper.realizedPnlUsd||0);
+    $('paperUnrealized').textContent=money(paper.unrealizedPnlUsd||0);
+    $('paperOpenCount').textContent=number((paper.openPositions||[]).length);
+    const paperPositions=paper.openPositions||[];
+    $('paperPositions').innerHTML=paperPositions.length?paperPositions.map(position=>'<div class="event"><strong>'+escapeHtml(position.mint.slice(0,6)+'…'+position.mint.slice(-5))+'</strong> · '+escapeHtml(money(position.positionUsd))+' virtual position · '+escapeHtml(position.returnPct.toFixed(2))+'% · P/L '+escapeHtml(money(position.unrealizedPnlUsd))+'</div>').join(''):'<div class="muted">No open paper positions.</div>';
+    $('paperNote').textContent=paper.enabled?paper.note:(paper.disabledReason||'Paper simulation is disabled.');
     const fd=status.feedDiagnostics||{};
     $('feedMessages').textContent=number(fd.messagesReceived);
     $('feedValidTrades').textContent=number(fd.validTradeMessages);
