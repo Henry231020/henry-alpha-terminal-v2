@@ -6,9 +6,9 @@ This is the deployment plan for controlling HENRY ALPHA from an Android tablet w
 
 - **Compute:** Oracle Cloud Always Free Ampere VM, within its Always Free limits (up to 2 OCPUs and 12 GB RAM). Availability depends on the home region; do not upgrade to a paid shape just to get capacity.
 - **Runtime:** Docker Compose. The Node.js scanner and PostgreSQL database restart automatically and PostgreSQL data persists in a Docker volume.
-- **Chain data:** PumpPortal free launch/migration notifications plus Helius standard Solana WebSockets and confirmed transaction lookups. PumpPortal's metered trade-subscription endpoint is not used. Free RugCheck cached reports add token-risk and insider-network signals; no RugCheck API key is needed.
+- **Chain data:** PumpPortal free launch/migration notifications plus Helius standard Solana WebSockets and confirmed transaction lookups. PumpPortal's metered trade-subscription endpoint is not used. Free RugCheck cached reports add token-risk and insider-network signals; Jupiter Price V3 provides a read-only reference-price cross-check. No RugCheck or Jupiter API key is required for these read-only calls.
 - **Private tablet access:** Tailscale Personal plan plus Tailscale Serve HTTPS. Only devices signed into the same private tailnet can reach the dashboard.
-- **Trading:** discovery, indicators, risk observations and alerts. Optional paper-only simulation is disabled by default. No wallet signer, Jupiter swap execution or automatic trading.
+- **Trading:** discovery, indicators, risk observations and alerts. Optional paper-only simulation is disabled by default. No wallet signer, Jupiter quote/order build or swap execution, or automatic trading.
 
 This architecture aims for no monthly subscription. Important: Oracle can reclaim an Always Free compute instance if CPU, network, and memory utilisation all remain below its idle thresholds for seven days. A lightly loaded scanner may be at risk of reclamation, so Oracle is a free trial deployment candidate, not a guaranteed always-on host. Helius free credits also have limits. Monitor usage and never select a paid resource by accident. If uninterrupted hosting is essential and no free host meets the workload, an always-on VPS may cost money; do not approve one without checking first.
 
