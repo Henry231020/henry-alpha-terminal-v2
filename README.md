@@ -6,6 +6,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 
 - PumpPortal launch and migration discovery over a persistent WebSocket.
 - Helius standard WebSocket monitoring of Pump.fun and PumpSwap program logs, followed by confirmed transaction lookups for observed buy/sell activity.
+- Jupiter Price API V3 reference-price cross-check alongside DexScreener; keyless access is throttled and no Jupiter API key is required for this read-only integration.
 - DexScreener market snapshots with caching and rate-limit backoff.
 - Observed buy/sell pressure alerts with explicit data-quality and risk gates.
 - Helius-backed holder concentration, creator-wallet share, mint-authority and freeze-authority checks; free RugCheck reports for token risk and insider indicators; and standard WebSocket trade observation when a Helius API key is configured.
@@ -53,7 +54,8 @@ Copy `.env.example` into a local `.env` file or set the variables in your hostin
 - `GET /api/token/:mint` — token and latest market snapshot.
 - `GET /api/pressure?mint=:mint` — observed buy/sell pressure.
 - `GET /api/indicators/:mint` — sampled 1-minute EMA 9/20/50 and RSI 14.
-- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time. Requires the token-trade feed and records only wallets observed by that feed.\n- Helius holder-risk lookups are globally rate-limited to five requests per minute and cached per mint for five minutes to protect RPC quotas. The background queue is bounded and exposes its depth in `/api/status`.
+- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time. Records only wallets observed by the Helius transaction parser.
+- `GET /api/jupiter/price/:mint` — keyless Jupiter Price V3 reference price; this is not an executable swap quote.\n- Helius holder-risk lookups are globally rate-limited to five requests per minute and cached per mint for five minutes to protect RPC quotas. The background queue is bounded and exposes its depth in `/api/status`.
 - `GET /api/risk/:mint` — holder concentration observation.
 - `GET /api/alerts?mint=:mint` — persisted alert history when PostgreSQL is configured.
 
@@ -63,7 +65,7 @@ Copy `.env.example` into a local `.env` file or set the variables in your hostin
 npm test
 ```
 
-## Paper trading\n\nPaper simulation is disabled unless `PAPER_TRADING_ENABLED=true` and every risk parameter is supplied in `.env`. It uses observed market prices and is not a realistic execution model: fees, slippage, priority fees and price impact are excluded. Open paper positions and balances are in memory and reset when the process restarts. Check `/api/paper` for its state.\n\n## Security
+## Jupiter integration\n\nThe current Jupiter integration is read-only Price API V3. It cross-checks the DexScreener price against Jupiter's last qualifying swap price. A missing Jupiter price means no qualifying recent trade was available; a displayed reference price may be stale for thinly traded tokens. Exact amount-specific swap quotes require a taker public key and are a later stage. No Jupiter order, transaction build, signing, or execution occurs in this build.\n\n## Paper trading\n\nPaper simulation is disabled unless `PAPER_TRADING_ENABLED=true` and every risk parameter is supplied in `.env`. It uses observed market prices and is not a realistic execution model: fees, slippage, priority fees and price impact are excluded. Open paper positions and balances are in memory and reset when the process restarts. Check `/api/paper` for its state.\n\n## Security
 
 - Do not put API keys, Telegram tokens, or wallet private keys in source code or GitHub.
 - Rotate any API key that has been posted into a chat or committed to a repository.
