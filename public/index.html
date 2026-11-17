@@ -245,12 +245,21 @@ async function selectToken(mint){
       const panel = $('pressurePanel');
       if(panel) {
         const observed = risk.status === 'observed' && Number.isFinite(Number(risk.top10ConcentrationPct));
-        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4>' +
+        const authority = risk.mintAuthority || {};
+        const authorityStatus = authority.status === 'observed';
+        const authorityText = value => !authorityStatus ? 'Unknown' : value ? 'Revoked' : 'ACTIVE';
+        const creatorPct = Number.isFinite(Number(risk.creatorConcentrationPct)) ? Number(risk.creatorConcentrationPct).toFixed(2)+'%' : 'Unknown';
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER & MINT AUTHORITY CHECK</h4>' +
           '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
           '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
+          '<div>Creator wallet concentration: '+ escapeHtml(creatorPct) + '</div>' +
           '<div>Unique holders observed: '+ escapeHtml(observed ? number(risk.holderCount) : 'Unknown') + '</div>' +
-          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — concentration alone cannot verify safety.</div>' +
-          '<div class="muted">'+escapeHtml(risk.reason || 'No complete holder scan result available.')+'</div>';
+          '<div>Mint authority: <strong>'+escapeHtml(authorityText(authority.mintAuthorityRevoked))+'</strong></div>' +
+          '<div>Freeze authority: <strong>'+escapeHtml(authorityText(authority.freezeAuthorityRevoked))+'</strong></div>' +
+          '<div>Mint initialized: '+escapeHtml(authorityStatus ? (authority.initialized ? 'Yes' : 'No') : 'Unknown')+'</div>' +
+          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — these checks do not prove a token is safe.</div>' +
+          '<div class="muted">'+escapeHtml(risk.reason || 'Holder scan unavailable.')+'</div>' +
+          '<div class="muted">'+escapeHtml(authority.reason || 'Mint authority data unavailable.')+'</div>';
       }
     } catch (_) {
       const panel = $('pressurePanel');
