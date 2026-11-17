@@ -69,3 +69,49 @@ test('holder-only risk updates preserve liquidity and fail closed on malformed c
   assert.equal(risk.holderConcentrationPct, null);
   assert.equal(risk.walletRisk, 'unknown');
 });
+
+
+test('price history retains more than ten minutes so EMA 50 can become ready', () => {
+  const now = 2_000_000_000;
+  const store = new PressureStore({ clock: () => now });
+  for (let minute = 0; minute < 55; minute++) {
+    assert.equal(store.recordSnapshot('mint', {
+      timestamp: now - (54 - minute) * 60_000,
+      priceUsd: 1 + minute / 100
+    }), true);
+  }
+  const snapshots = store.getSnapshots('mint');
+  assert.equal(snapshots.length, 55);
+  const { calculateIndicators } = require('../lib/indicators');
+  const result = calculateIndicators(snapshots);
+  assert.equal(result.ema50Ready, true);
+  assert.notEqual(result.ema50, null);
+});
+
+
+test('restores mint authority and creator concentration gates without inventing unknown values', () => {
+  const now = 2_000_000_000;
+  const store = new PressureStore({ clock: () => now });
+  const mint = 'TokenMint111111111111111111111111111111111';
+  store.restoreObservation(mint, 'risk', now, {
+    liquidityUsd: 20000,
+    holderConcentrationPct: 20,
+    creatorConcentrationPct: 10,
+    mintAuthorityRevoked: true,
+    freezeAuthorityRevoked: true,
+    mintInitialized: true,
+    tokenProgram: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    walletRisk: 'low'
+  });
+  const gates = store.analyse(mint).gates;
+  assert.equal(gates.creatorConcentrationOk, true);
+  assert.equal(gates.mintAuthorityOk, true);
+  assert.equal(gates.freezeAuthorityOk, true);
+  assert.equal(gates.mintInitializedOk, true);
+  assert.equal(gates.tokenProgramOk, true);
+
+  store.restoreObservation(mint, 'risk', now, { creatorConcentrationPct: 101, mintAuthorityRevoked: 'true' });
+  const reset = store.analyse(mint).gates;
+  assert.equal(reset.creatorConcentrationOk, false);
+  assert.equal(reset.mintAuthorityOk, false);
+});

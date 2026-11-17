@@ -1,0 +1,28 @@
+name: HENRY ALPHA tests
+
+on:
+  push:
+    branches:
+      - henry-alpha-build
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --ignore-scripts
+      - run: npm test
+
+      - name: Validate Docker Compose configuration
+        env:
+          HELIUS_API_KEY: ci-placeholder
+          POSTGRES_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: docker compose config --quiet
+      - name: Build production container
+        run: docker build --tag henry-alpha:test .

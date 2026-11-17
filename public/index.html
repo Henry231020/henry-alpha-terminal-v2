@@ -86,6 +86,19 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <div class="muted" style="margin-top:10px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
   </section>
 
+  <section class="panel" style="margin-bottom:18px;padding:14px 16px">
+    <div class="panel-head" style="padding:0 0 10px;border:0"><h2>PAPER SIMULATION</h2><span class="pill" id="paperState">Disabled</span></div>
+    <div class="detail-grid" style="margin:0">
+      <div class="detail-stat"><div class="label">VIRTUAL CASH</div><div class="value" id="paperCash">—</div></div>
+      <div class="detail-stat"><div class="label">EQUITY</div><div class="value" id="paperEquity">—</div></div>
+      <div class="detail-stat"><div class="label">REALIZED P/L</div><div class="value" id="paperRealized">—</div></div>
+      <div class="detail-stat"><div class="label">UNREALIZED P/L</div><div class="value" id="paperUnrealized">—</div></div>
+      <div class="detail-stat"><div class="label">OPEN POSITIONS</div><div class="value" id="paperOpenCount">—</div></div>
+    </div>
+    <div id="paperPositions" style="margin-top:10px"></div>
+    <div class="muted" style="margin-top:10px" id="paperNote">Paper simulation is disabled. It never uses a wallet or submits real transactions.</div>
+  </section>
+
   <div class="controls">
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
     <select id="sort">
@@ -177,7 +190,7 @@ function renderTokens(){
     const img='<span class="token-avatar">'+initials+'</span>'+(t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'');
     return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
       '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
-      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
+      '<td><div>'+money(t.priceUsd)+'</div><div class="muted">Jupiter: '+money(t.jupiterPriceUsd)+'</div></td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
   }).join('');
   $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
 }
@@ -198,7 +211,8 @@ function renderDetail(t,events=[],notes={}){
     '<h2>'+escapeHtml(t.name||'Unknown token')+'</h2><div class="muted">'+escapeHtml(t.symbol||'')+'</div>'+
     '<div style="margin-top:12px;overflow-wrap:anywhere"><div class="muted">TOKEN MINT</div><code>'+escapeHtml(t.mint)+'</code> <button id="copyMint" style="padding:5px 8px">Copy</button></div>'+
     '<div class="detail-grid">'+
-    stat('Price',money(t.priceUsd))+stat('Market cap',money(t.marketCapUsd))+
+    stat('DexScreener price',money(t.priceUsd))+stat('Jupiter reference',money(t.jupiterPriceUsd))+
+    stat('Jupiter vs DEX',t.jupiterPriceDifferencePct==null?'—':(t.jupiterPriceDifferencePct>0?'+':'')+t.jupiterPriceDifferencePct.toFixed(2)+'%')+stat('Market cap',money(t.marketCapUsd))+
     stat('Liquidity',money(t.liquidityUsd))+stat('24h volume',money(t.volume24h))+
     stat('24h buys',number(t.buys24h))+stat('24h sells',number(t.sells24h))+
     stat('24h change',changeText)+stat('Age since event',ageText(t.firstSeenAt))+
@@ -245,16 +259,76 @@ async function selectToken(mint){
       const panel = $('pressurePanel');
       if(panel) {
         const observed = risk.status === 'observed' && Number.isFinite(Number(risk.top10ConcentrationPct));
-        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4>' +
+        const authority = risk.mintAuthority || {};
+        const authorityStatus = authority.status === 'observed';
+        const authorityText = value => !authorityStatus ? 'Unknown' : value ? 'Revoked' : 'ACTIVE';
+        const creatorPct = risk.creatorConcentrationPct !== null && risk.creatorConcentrationPct !== undefined && Number.isFinite(Number(risk.creatorConcentrationPct)) ? Number(risk.creatorConcentrationPct).toFixed(2)+'%' : 'Unknown';
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER & MINT AUTHORITY CHECK</h4>' +
           '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
           '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
+          '<div>Creator wallet concentration: '+ escapeHtml(creatorPct) + '</div>' +
           '<div>Unique holders observed: '+ escapeHtml(observed ? number(risk.holderCount) : 'Unknown') + '</div>' +
-          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — concentration alone cannot verify safety.</div>' +
-          '<div class="muted">'+escapeHtml(risk.reason || 'No complete holder scan result available.')+'</div>';
+          '<div>Mint authority: <strong>'+escapeHtml(authorityText(authority.mintAuthorityRevoked))+'</strong></div>' +
+          '<div>Freeze authority: <strong>'+escapeHtml(authorityText(authority.freezeAuthorityRevoked))+'</strong></div>' +
+          '<div>Mint initialized: '+escapeHtml(authorityStatus ? (authority.initialized ? 'Yes' : 'No') : 'Unknown')+'</div>' +
+          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — these checks do not prove a token is safe.</div>' +
+          '<div class="muted">'+escapeHtml(risk.reason || 'Holder scan unavailable.')+'</div>' +
+          '<div class="muted">'+escapeHtml(authority.reason || 'Mint authority data unavailable.')+'</div>';
+        const rug = risk.rugCheck || {};
+        const rugObserved = rug.status === 'observed';
+        const rugScore = rugObserved && rug.scoreNormalized !== null && rug.scoreNormalized !== undefined && Number.isFinite(Number(rug.scoreNormalized)) ? Number(rug.scoreNormalized).toFixed(1) : 'Unknown';
+        const riskFlags = Array.isArray(rug.riskFlags) ? rug.riskFlags.slice(0, 5).map(flag =>
+          '<div class="event"><strong>'+escapeHtml(flag.level || 'unknown')+'</strong> · '+escapeHtml(flag.name || 'Risk flag')+' — '+escapeHtml(flag.description || '')+'</div>'
+        ).join('') : '';
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">RUGCHECK WALLET & INSIDER CHECK</h4>' +
+          '<div>RugCheck assessment: <strong>'+escapeHtml(rugObserved ? String(rug.walletRisk || 'unknown').toUpperCase() : 'UNKNOWN')+'</strong></div>' +
+          '<div>RugCheck score (higher is worse): '+escapeHtml(rugScore)+'/100</div>' +
+          '<div>Insider networks: '+escapeHtml(rugObserved ? number(rug.insiderNetworkCount) : 'Unknown')+' · Insider top holders: '+escapeHtml(rugObserved ? number(rug.insiderHolderCount) : 'Unknown')+'</div>' +
+          '<div>Creator history: '+escapeHtml(rugObserved ? number(rug.creatorHistoryCount) : 'Unknown')+' · Metadata mutable: '+escapeHtml(rugObserved ? String(rug.metadataMutable) : 'Unknown')+'</div>' +
+          (riskFlags || '<div class="muted">'+escapeHtml(rug.reason || 'RugCheck report unavailable; wallet-risk gate remains closed.')+'</div>') +
+          '<div class="muted">RugCheck is a cached third-party risk report, not a guarantee of safety.</div>';
       }
     } catch (_) {
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4><div><strong>UNVERIFIED — do not treat as safe</strong></div><div>Wallet/scam risk: UNKNOWN. Risk service unavailable.</div>';
+    }
+
+    try {
+      const result = await api('/api/indicators/' + encodeURIComponent(mint));
+      const panel = $('pressurePanel');
+      if (panel) {
+        const fmt = value => value == null ? 'Collecting data' : money(value);
+        const rsi = result.rsi14 == null ? 'Collecting data' : Number(result.rsi14).toFixed(2);
+        panel.innerHTML += '<h4 style="margin:14px 0 6px">TECHNICAL INDICATORS · 1M</h4>' +
+          '<div>EMA 9: <strong>' + escapeHtml(fmt(result.ema9)) + '</strong> · EMA 20: <strong>' + escapeHtml(fmt(result.ema20)) + '</strong> · EMA 50: <strong>' + escapeHtml(fmt(result.ema50)) + '</strong></div>' +
+          '<div>RSI 14: <strong>' + escapeHtml(rsi) + '</strong></div>' +
+          '<div class="muted">' + escapeHtml(number(result.candleCount)) + ' observed minute buckets across ' + escapeHtml(number(result.spanMinutes)) + ' minutes · coverage ' + escapeHtml(number(result.coveragePct)) + '%</div>' +
+          '<div class="muted">' + escapeHtml(result.note || 'Indicators require sufficient observed history.') + '</div>';
+      }
+    } catch (_) {
+      const panel = $('pressurePanel');
+      if (panel) panel.innerHTML += '<h4 style="margin:14px 0 6px">TECHNICAL INDICATORS</h4><div class="muted">Indicator data unavailable.</div>';
+    }
+
+    try {
+      const result = await api('/api/early-buyers/' + encodeURIComponent(mint) + '?windowMs=600000&limit=10');
+      const panel = $('pressurePanel');
+      if (panel) {
+        const buyers = result.earlyBuyers || [];
+        const rows = buyers.map(row =>
+          '<div class="event"><a href="https://solscan.io/account/' + encodeURIComponent(row.wallet) + '" target="_blank" rel="noopener noreferrer">' +
+          escapeHtml(row.wallet.slice(0, 6) + '…' + row.wallet.slice(-5)) + '</a> · ' +
+          escapeHtml(money(row.buyUsd)) + ' bought · ' + escapeHtml(number(row.buyCount)) + ' buys · ' +
+          escapeHtml(row.minutesAfterFirstSeen == null ? 'time unknown' : row.minutesAfterFirstSeen + 'm after first seen') + '</div>'
+        ).join('');
+        panel.innerHTML += '<h4 style="margin:14px 0 6px">EARLIEST OBSERVED BUYERS · FIRST 10 MINUTES</h4>' +
+          (rows || '<div class="muted">No early buyers available yet. Trade-feed access and enough observed trades are required.</div>') +
+          '<div class="muted">' + escapeHtml(result.note || 'Wallet activity is unavailable until trades are observed.') + '</div>' +
+          '<div class="muted">Trade feed: ' + escapeHtml(result.tradeFeed || 'unknown') + '</div>';
+      }
+    } catch (_) {
+      const panel = $('pressurePanel');
+      if (panel) panel.innerHTML += '<h4 style="margin:14px 0 6px">EARLIEST OBSERVED BUYERS</h4><div class="muted">Wallet activity unavailable.</div>';
     }
 
   }catch(e){
@@ -271,6 +345,16 @@ async function refreshAll(){
     state.events=events||[];
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
+    const paper=status.paperTrading||{};
+    $('paperState').textContent=paper.enabled?'PAPER ONLY':'DISABLED';
+    $('paperCash').textContent=money(paper.cashUsd||0);
+    $('paperEquity').textContent=money(paper.equityUsd||0);
+    $('paperRealized').textContent=money(paper.realizedPnlUsd||0);
+    $('paperUnrealized').textContent=money(paper.unrealizedPnlUsd||0);
+    $('paperOpenCount').textContent=number((paper.openPositions||[]).length);
+    const paperPositions=paper.openPositions||[];
+    $('paperPositions').innerHTML=paperPositions.length?paperPositions.map(position=>'<div class="event"><strong>'+escapeHtml(position.mint.slice(0,6)+'…'+position.mint.slice(-5))+'</strong> · '+escapeHtml(money(position.positionUsd))+' virtual position · '+escapeHtml(position.returnPct.toFixed(2))+'% · P/L '+escapeHtml(money(position.unrealizedPnlUsd))+'</div>').join(''):'<div class="muted">No open paper positions.</div>';
+    $('paperNote').textContent=paper.enabled?paper.note:(paper.disabledReason||'Paper simulation is disabled.');
     const fd=status.feedDiagnostics||{};
     $('feedMessages').textContent=number(fd.messagesReceived);
     $('feedValidTrades').textContent=number(fd.validTradeMessages);

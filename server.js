@@ -6,20 +6,28 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
-const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const { createHeliusRiskClient } = require('./lib/helius-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
-const { parseTradeMessage } = require('./lib/trade-message');
+const { calculateIndicators } = require('./lib/indicators');
+const { createRateLimiter } = require('./lib/rate-limit');
+const { createHeliusTradeStream } = require('./lib/helius-trade-stream');
+const { createRugCheckClient } = require('./lib/rugcheck-risk');
+const { fromEnvironment: createPaperTraderFromEnvironment } = require('./lib/paper-trader');
+const { createJupiterPriceClient } = require('./lib/jupiter-price');
 const heliusRisk = createHeliusRiskClient();
+const rugCheck = createRugCheckClient();
+const paperTrader = createPaperTraderFromEnvironment();
+const jupiterPriceClient = createJupiterPriceClient();
+const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
-let tradeSubscriptions = null;
+let heliusTradeStream = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
 let solUsdRequest = null;
-let tradeFeedStatus = 'waiting for API key';
+let tradeFeedStatus = process.env.HELIUS_API_KEY ? 'Helius stream not started' : 'disabled: HELIUS_API_KEY missing';
 const alertedPressure = new Map();
 
 const PORT = Number(process.env.PORT || 3000);
@@ -197,8 +205,8 @@ function addEvent(payload) {
 
   const token = upsertFromEvent(event);
   if (token && token.mint) {
-    subscribeMintTrades(token.mint);
     if (!token.image && token.uri) resolveTokenMetadata(token);
+    queueRiskLookup(token.mint);
   }
 
   broadcast({
@@ -222,9 +230,6 @@ async function getSolUsdPrice() {
     } catch (_) { return null; }
   })();
   try { return await solUsdRequest; } finally { solUsdRequest = null; }
-}
-function subscribeMintTrades(mint) {
-  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
 }
 
 const pendingTrades = [];
@@ -260,19 +265,13 @@ function recordTradeAtPrice(item, price) {
   broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
-function processTradeMessage(data) {
-  const parsedTrade = parseTradeMessage(data);
-  if (!parsedTrade.ok) {
-    if (parsedTrade.candidate) feedDiagnostics.recordRejected(parsedTrade.reason);
-    return false;
-  }
+function processObservedTrade(trade) {
+  if (!trade || !trade.mint || !tokens.has(trade.mint) || !['buy', 'sell'].includes(trade.side) || !Number.isFinite(Number(trade.solAmount)) || Number(trade.solAmount) <= 0) return false;
   feedDiagnostics.recordValidTrade();
-  const item = { ...parsedTrade.trade, timestamp: Date.now() };
+  const item = { ...trade, timestamp: Number(trade.timestamp) || Date.now() };
   getSolUsdPrice().then(price => {
     if (!price) {
       feedDiagnostics.recordPriceUnavailable();
-      // Retain a bounded queue so a temporary price-provider outage does not
-      // discard otherwise valid trades. Expire old items before retrying.
       const cutoff = Date.now() - 5 * 60 * 1000;
       while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
       if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
@@ -290,6 +289,90 @@ function processTradeMessage(data) {
     pendingTrades.push(item);
   });
   return true;
+}
+
+heliusTradeStream = createHeliusTradeStream({
+  onTrade: processObservedTrade,
+  onStatus: status => {
+    tradeFeedStatus = status;
+    broadcast({ type: 'trade-feed-status', provider: 'Helius standard Solana WebSocket', status, time: new Date().toISOString() });
+  }
+});
+
+const riskQueue = [];
+const riskQueued = new Set();
+const riskLastQueued = new Map();
+const riskRequests = new Map();
+const MAX_RISK_QUEUE = 500;
+const RISK_QUEUE_INTERVAL_MS = 12000;
+const RISK_REQUEUE_COOLDOWN_MS = 5 * 60 * 1000;
+
+function queueRiskLookup(mint) {
+  if (!mint || riskQueued.has(mint)) return false;
+  const lastQueued = riskLastQueued.get(mint) || 0;
+  if (Date.now() - lastQueued < RISK_REQUEUE_COOLDOWN_MS) return false;
+  if (riskQueue.length >= MAX_RISK_QUEUE) {
+    const dropped = riskQueue.shift();
+    if (dropped) riskQueued.delete(dropped);
+  }
+  riskQueue.push(mint);
+  riskQueued.add(mint);
+  riskLastQueued.set(mint, Date.now());
+  if (riskLastQueued.size > 1000) riskLastQueued.delete(riskLastQueued.keys().next().value);
+  return true;
+}
+
+async function refreshRisk(mint) {
+  if (riskRequests.has(mint)) return riskRequests.get(mint);
+  const rate = allowHolderRiskLookup();
+  if (!rate.allowed) return { rateLimited: true, retryAfterSeconds: rate.retryAfterSeconds };
+  const pending = (async () => {
+    const token = tokens.get(mint);
+    let risk;
+    let rugCheckRisk;
+    try {
+      if (token && token.traderPublicKey) {
+        [risk, rugCheckRisk] = await Promise.all([
+          heliusRisk.getHolderRisk(mint, { creatorWallet: token.traderPublicKey }),
+          rugCheck.getRisk(mint)
+        ]);
+      } else {
+        rugCheckRisk = await rugCheck.getRisk(mint);
+        risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: rugCheckRisk.creator });
+      }
+    } catch (_) {
+      risk = { status: 'unknown', reason: 'Risk provider request failed', top10ConcentrationPct: null, creatorConcentrationPct: null, mintAuthority: { status: 'unknown' } };
+      rugCheckRisk = { status: 'unknown', walletRisk: 'unknown', reason: 'RugCheck provider request failed' };
+    }
+    risk.rugCheck = rugCheckRisk;
+    const riskState = {
+      holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
+      creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
+      mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
+      freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
+      mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
+      tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
+      walletRisk: rugCheckRisk.status === 'observed' ? rugCheckRisk.walletRisk : 'unknown'
+    };
+    // Every refresh replaces the prior measurements; provider failures reset gates to unknown.
+    pressureStore.updateHolderRisk(mint, riskState);
+    persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
+    broadcast({ type: 'risk-update', mint, riskState, rugCheck: rugCheckRisk, automaticTrading: false });
+    return { mint, risk, riskState, rugCheckRisk, rateLimited: false };
+  })();
+  riskRequests.set(mint, pending);
+  try { return await pending; } finally { riskRequests.delete(mint); }
+}
+
+async function processRiskQueue() {
+  if (!riskQueue.length) return;
+  const mint = riskQueue.shift();
+  riskQueued.delete(mint);
+  const result = await refreshRisk(mint);
+  if (result && result.rateLimited) {
+    riskQueue.unshift(mint);
+    riskQueued.add(mint);
+  }
 }
 
 async function fetchDexPairs(mint) {
@@ -348,16 +431,24 @@ async function fetchDexPairs(mint) {
   return market;
 }
 
-async function refreshOneToken(mint) {
+async function refreshOneToken(mint, jupiterPrice = null) {
   try {
     const market = await fetchDexPairs(mint);
     const prior = tokens.get(mint);
 
     if (!prior || !market) return;
 
+    const jupiterPriceUsd = jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.usdPrice : null;
     const merged = {
       ...prior,
       ...market,
+      jupiterPriceUsd,
+      jupiterPriceBlockId: jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.blockId : null,
+      jupiterPriceChange24h: jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.priceChange24h : null,
+      jupiterPriceDifferencePct: jupiterPriceUsd !== null && Number.isFinite(Number(market.priceUsd)) && Number(market.priceUsd) > 0
+        ? Number(((jupiterPriceUsd / Number(market.priceUsd) - 1) * 100).toFixed(2))
+        : null,
+      jupiterPriceStatus: jupiterPrice && jupiterPrice.status || 'unavailable',
       name: market.baseName || prior.name,
       symbol: market.baseSymbol || prior.symbol,
       updatedAt: new Date().toISOString()
@@ -370,6 +461,8 @@ async function refreshOneToken(mint) {
       persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
     pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+    const paperEvents = paperTrader.onMarketUpdate({ mint, priceUsd: merged.priceUsd, analysis: pressureStore.analyse(mint), now: Date.now() });
+    for (const event of paperEvents) broadcast({ type: 'paper-trade', ...event });
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
     const message = String(error && error.message || 'Unknown DEX error');
@@ -394,9 +487,10 @@ async function refreshMarketData() {
 
   try {
     const list = [...tokens.keys()].slice(0, 20);
+    const jupiterPrices = await jupiterPriceClient.getPrices(list);
 
     for (const mint of list) {
-      await refreshOneToken(mint);
+      await refreshOneToken(mint, jupiterPrices[mint] || null);
       await new Promise(resolve => setTimeout(resolve, 350));
     }
 
@@ -419,8 +513,7 @@ function connectPumpPortal() {
 
   console.log('Connecting to PumpPortal...');
 
-  const socketUrl = process.env.PUMPPORTAL_API_KEY ? PUMP_URL + '?api-key=' + encodeURIComponent(process.env.PUMPPORTAL_API_KEY) : PUMP_URL;
-  const socket = new WebSocket(socketUrl);
+  const socket = new WebSocket(PUMP_URL);
   pumpSocket = socket;
 
   socket.on('open', () => {
@@ -431,11 +524,6 @@ function connectPumpPortal() {
 
     socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
     socket.send(JSON.stringify({ method: 'subscribeMigration' }));
-    tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
-    if (process.env.PUMPPORTAL_API_KEY) {
-      for (const mint of tokens.keys()) tradeSubscriptions.subscribe(mint);
-    }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
 
@@ -451,7 +539,6 @@ function connectPumpPortal() {
     feedDiagnostics.recordMessage();
     try {
       const parsed = JSON.parse(raw.toString());
-      if (processTradeMessage(parsed)) return;
       addEvent(parsed);
     } catch (_) {
       feedDiagnostics.recordMalformedJson();
@@ -467,8 +554,6 @@ function connectPumpPortal() {
     if (pumpSocket !== socket) return;
 
     pumpStatus = 'disconnected';
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'disconnected' : 'disabled: API key required';
-    tradeSubscriptions = null;
 
     broadcast({
       type: 'status',
@@ -485,8 +570,6 @@ function connectPumpPortal() {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
   const url = new URL(
     req.url,
     `http://${req.headers.host || 'localhost'}`
@@ -521,11 +604,14 @@ const server = http.createServer(async (req, res) => {
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
       feedDiagnostics: feedDiagnostics.snapshot(),
-      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
+      heliusRisk: process.env.HELIUS_API_KEY ? 'configured; background risk queue and on-demand checks' : 'not configured',
       persistence: persistence.status(),
-      tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
+      heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
+      riskQueue: { queued: riskQueue.length, inFlight: riskRequests.size, maxQueued: MAX_RISK_QUEUE },
+      paperTrading: paperTrader.summary(),
+      jupiterPrice: { provider: 'Jupiter Price API V3', mode: 'keyless; 0.5 requests per second', status: 'reference price cross-check only' },
       solUsdPrice,
-      pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
+      pressureEngine: 'Helius standard logs + confirmed transaction balance changes + RugCheck cached risk reports; BUY signals remain risk-gated',
       automaticTrading: false,
       persistenceMode: persistence.status().mode
     });
@@ -533,16 +619,25 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname.startsWith('/api/risk/')) {
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
-    if (!mint) return sendJson(res, 400, { error: 'mint required' });
-    const risk = await heliusRisk.getHolderRisk(mint);
-    if (risk.status === 'observed') {
-      pressureStore.updateHolderRisk(mint, {
-        holderConcentrationPct: risk.top10ConcentrationPct,
-        walletRisk: 'unknown'
-      });
-      persistence.save(mint, 'risk', Date.now(), risk).catch(() => {});
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { error: 'valid mint required' });
+    const queuedIndex = riskQueue.indexOf(mint);
+    if (queuedIndex >= 0) { riskQueue.splice(queuedIndex, 1); riskQueued.delete(mint); }
+    const result = await refreshRisk(mint);
+    if (result && result.rateLimited) {
+      res.setHeader('Retry-After', String(result.retryAfterSeconds));
+      return sendJson(res, 429, { ok: false, error: 'Risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: result.retryAfterSeconds });
     }
-    return sendJson(res, 200, { mint, risk, automaticTrading: false });
+    return sendJson(res, 200, { mint, risk: result.risk, automaticTrading: false });
+  }
+
+  if (url.pathname.startsWith('/api/jupiter/price/')) {
+    const mint = decodeURIComponent(url.pathname.slice('/api/jupiter/price/'.length));
+    const price = await jupiterPriceClient.getPrice(mint);
+    return sendJson(res, price.status === 'observed' ? 200 : 503, { mint, ...price, quoteOrSwapExecuted: false });
+  }
+
+  if (url.pathname === '/api/paper') {
+    return sendJson(res, 200, paperTrader.summary());
   }
 
   if (url.pathname === '/api/alerts') {
@@ -571,6 +666,25 @@ const server = http.createServer(async (req, res) => {
       analysis: pressureStore.analyse(token.mint)
     }));
     return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
+  }
+
+  const indicatorsMatch = url.pathname.match(/^\/api\/indicators\/([^/]+)$/);
+  if (indicatorsMatch) {
+    const mint = decodeURIComponent(indicatorsMatch[1]);
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
+    const indicators = calculateIndicators(pressureStore.getSnapshots(mint));
+    return sendJson(res, 200, { mint, ...indicators, automaticTrading: false });
+  }
+
+  const earlyBuyersMatch = url.pathname.match(/^\/api\/early-buyers\/([^/]+)$/);
+  if (earlyBuyersMatch) {
+    const mint = decodeURIComponent(earlyBuyersMatch[1]);
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { ok: false, error: 'Invalid Solana mint address' });
+    const token = tokens.get(mint);
+    const windowMs = Math.max(60000, Math.min(30 * 60 * 1000, Number(url.searchParams.get('windowMs')) || 10 * 60 * 1000));
+    const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 25));
+    const activity = pressureStore.getWalletActivity(mint, { launchAt: token && token.firstSeenAt, windowMs, limit });
+    return sendJson(res, 200, { mint, ...activity, tradeFeed: tradeFeedStatus, automaticTrading: false });
   }
 
   if (url.pathname === '/events' || url.pathname === '/api/events') {
@@ -736,7 +850,9 @@ server.listen(PORT, HOST, () => {
     if (liveFeedsStarted) return;
     liveFeedsStarted = true;
     connectPumpPortal();
+    if (heliusTradeStream) heliusTradeStream.start();
     setInterval(refreshMarketData, DEX_REFRESH_MS);
+    setInterval(() => { processRiskQueue().catch(() => {}); }, RISK_QUEUE_INTERVAL_MS);
   }
 
   persistence.initialize().then(async result => {
@@ -753,7 +869,8 @@ server.listen(PORT, HOST, () => {
             if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
           }
         }
-        console.log('Pressure persistence recovery:', { mints: mints.length, restored });
+        for (const mint of mints) queueRiskLookup(mint);
+        console.log('Pressure persistence recovery:', { mints: mints.length, restored, riskQueued: riskQueue.length });
       } catch (error) {
         console.error('Pressure persistence recovery failed; continuing in memory mode:', error.message);
       }
