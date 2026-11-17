@@ -257,6 +257,44 @@ async function selectToken(mint){
       if(panel) panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4><div><strong>UNVERIFIED — do not treat as safe</strong></div><div>Wallet/scam risk: UNKNOWN. Risk service unavailable.</div>';
     }
 
+    try {
+      const result = await api('/api/indicators/' + encodeURIComponent(mint));
+      const panel = $('pressurePanel');
+      if (panel) {
+        const fmt = value => value == null ? 'Collecting data' : money(value);
+        const rsi = result.rsi14 == null ? 'Collecting data' : Number(result.rsi14).toFixed(2);
+        panel.innerHTML += '<h4 style="margin:14px 0 6px">TECHNICAL INDICATORS · 1M</h4>' +
+          '<div>EMA 9: <strong>' + escapeHtml(fmt(result.ema9)) + '</strong> · EMA 20: <strong>' + escapeHtml(fmt(result.ema20)) + '</strong> · EMA 50: <strong>' + escapeHtml(fmt(result.ema50)) + '</strong></div>' +
+          '<div>RSI 14: <strong>' + escapeHtml(rsi) + '</strong></div>' +
+          '<div class="muted">' + escapeHtml(number(result.candleCount)) + ' observed minute buckets across ' + escapeHtml(number(result.spanMinutes)) + ' minutes · coverage ' + escapeHtml(number(result.coveragePct)) + '%</div>' +
+          '<div class="muted">' + escapeHtml(result.note || 'Indicators require sufficient observed history.') + '</div>';
+      }
+    } catch (_) {
+      const panel = $('pressurePanel');
+      if (panel) panel.innerHTML += '<h4 style="margin:14px 0 6px">TECHNICAL INDICATORS</h4><div class="muted">Indicator data unavailable.</div>';
+    }
+
+    try {
+      const result = await api('/api/early-buyers/' + encodeURIComponent(mint) + '?windowMs=600000&limit=10');
+      const panel = $('pressurePanel');
+      if (panel) {
+        const buyers = result.earlyBuyers || [];
+        const rows = buyers.map(row =>
+          '<div class="event"><a href="https://solscan.io/account/' + encodeURIComponent(row.wallet) + '" target="_blank" rel="noopener noreferrer">' +
+          escapeHtml(row.wallet.slice(0, 6) + '…' + row.wallet.slice(-5)) + '</a> · ' +
+          escapeHtml(money(row.buyUsd)) + ' bought · ' + escapeHtml(number(row.buyCount)) + ' buys · ' +
+          escapeHtml(row.minutesAfterFirstSeen == null ? 'time unknown' : row.minutesAfterFirstSeen + 'm after first seen') + '</div>'
+        ).join('');
+        panel.innerHTML += '<h4 style="margin:14px 0 6px">EARLIEST OBSERVED BUYERS · FIRST 10 MINUTES</h4>' +
+          (rows || '<div class="muted">No early buyers available yet. Trade-feed access and enough observed trades are required.</div>') +
+          '<div class="muted">' + escapeHtml(result.note || 'Wallet activity is unavailable until trades are observed.') + '</div>' +
+          '<div class="muted">Trade feed: ' + escapeHtml(result.tradeFeed || 'unknown') + '</div>';
+      }
+    } catch (_) {
+      const panel = $('pressurePanel');
+      if (panel) panel.innerHTML += '<h4 style="margin:14px 0 6px">EARLIEST OBSERVED BUYERS</h4><div class="muted">Wallet activity unavailable.</div>';
+    }
+
   }catch(e){
     const t=state.tokens.find(x=>x.mint===mint);
     renderDetail(t,[]);
