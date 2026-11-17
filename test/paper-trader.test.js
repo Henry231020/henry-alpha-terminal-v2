@@ -57,6 +57,15 @@ test('stop-loss and trailing-stop exits close simulated positions', () => {
   assert.equal(trail[0].reason, 'trailing-stop');
 });
 
+test('maximum open positions blocks additional simulated entries', () => {
+  const trader = createPaperTrader({ ...config, maxOpenPositions: 1 });
+  const first = trader.onMarketUpdate({ mint: 'mint-a', priceUsd: 1, analysis: passingAnalysis, now: Date.parse('2026-11-17T00:00:00Z') });
+  const second = trader.onMarketUpdate({ mint: 'mint-b', priceUsd: 1, analysis: passingAnalysis, now: Date.parse('2026-11-17T00:01:00Z') });
+  assert.equal(first[0].type, 'PAPER_BUY');
+  assert.equal(second.length, 0);
+  assert.equal(trader.summary().openPositions.length, 1);
+});
+
 test('daily loss limit and maximum open positions block new entries', () => {
   const trader = createPaperTrader({ ...config, positionSizeUsd: 50, stopLossPct: 20, dailyLossLimitUsd: 9, maxOpenPositions: 1 });
   trader.onMarketUpdate({ mint: 'mint-a', priceUsd: 1, analysis: passingAnalysis, now: Date.parse('2026-11-17T00:00:00Z') });
