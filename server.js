@@ -202,6 +202,7 @@ function addEvent(payload) {
   const token = upsertFromEvent(event);
   if (token && token.mint) {
     if (!token.image && token.uri) resolveTokenMetadata(token);
+    queueRiskLookup(token.mint);
   }
 
   broadcast({
@@ -293,6 +294,70 @@ heliusTradeStream = createHeliusTradeStream({
     broadcast({ type: 'trade-feed-status', provider: 'Helius standard Solana WebSocket', status, time: new Date().toISOString() });
   }
 });
+
+const riskQueue = [];
+const riskQueued = new Set();
+const riskLastQueued = new Map();
+const riskRequests = new Map();
+const MAX_RISK_QUEUE = 500;
+const RISK_QUEUE_INTERVAL_MS = 12000;
+const RISK_REQUEUE_COOLDOWN_MS = 5 * 60 * 1000;
+
+function queueRiskLookup(mint) {
+  if (!mint || riskQueued.has(mint)) return false;
+  const lastQueued = riskLastQueued.get(mint) || 0;
+  if (Date.now() - lastQueued < RISK_REQUEUE_COOLDOWN_MS) return false;
+  if (riskQueue.length >= MAX_RISK_QUEUE) {
+    const dropped = riskQueue.shift();
+    if (dropped) riskQueued.delete(dropped);
+  }
+  riskQueue.push(mint);
+  riskQueued.add(mint);
+  riskLastQueued.set(mint, Date.now());
+  return true;
+}
+
+async function refreshRisk(mint) {
+  if (riskRequests.has(mint)) return riskRequests.get(mint);
+  const rate = allowHolderRiskLookup();
+  if (!rate.allowed) return { rateLimited: true, retryAfterSeconds: rate.retryAfterSeconds };
+  const pending = (async () => {
+    const token = tokens.get(mint);
+    const [risk, rugCheckRisk] = await Promise.all([
+      heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
+      rugCheck.getRisk(mint)
+    ]);
+    risk.rugCheck = rugCheckRisk;
+    const riskState = {
+      holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
+      creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
+      mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
+      freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
+      mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
+      tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
+      walletRisk: rugCheckRisk.status === 'observed' ? rugCheckRisk.walletRisk : 'unknown'
+    };
+    // Every refresh replaces the prior measurements; provider failures reset gates to unknown.
+    pressureStore.updateHolderRisk(mint, riskState);
+    persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
+    broadcast({ type: 'risk-update', mint, riskState, rugCheck: rugCheckRisk, automaticTrading: false });
+    return { mint, risk, riskState, rugCheckRisk, rateLimited: false };
+  })();
+  riskRequests.set(mint, pending);
+  try { return await pending; } finally { riskRequests.delete(mint); }
+}
+
+async function processRiskQueue() {
+  if (!riskQueue.length) return;
+  const mint = riskQueue.shift();
+  riskQueued.delete(mint);
+  const result = await refreshRisk(mint);
+  if (result && result.rateLimited) {
+    riskQueue.unshift(mint);
+    riskQueued.add(mint);
+  }
+}
+
 async function fetchDexPairs(mint) {
   const cached = marketCache.get(mint);
   if (cached) return cached;
@@ -514,6 +579,7 @@ const server = http.createServer(async (req, res) => {
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       persistence: persistence.status(),
       heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
+      riskQueue: { queued: riskQueue.length, inFlight: riskRequests.size, maxQueued: MAX_RISK_QUEUE },
       solUsdPrice,
       pressureEngine: 'Helius standard logs + confirmed transaction balance changes; BUY signals remain risk-gated',
       automaticTrading: false,
@@ -522,33 +588,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname.startsWith('/api/risk/')) {
-    const rate = allowHolderRiskLookup();
-    if (!rate.allowed) {
-      res.setHeader('Retry-After', String(rate.retryAfterSeconds));
-      return sendJson(res, 429, { ok: false, error: 'Holder risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: rate.retryAfterSeconds });
-    }
-
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
-    if (!mint) return sendJson(res, 400, { error: 'mint required' });
-    const token = tokens.get(mint);
-    const [risk, rugCheckRisk] = await Promise.all([
-      heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey }),
-      rugCheck.getRisk(mint)
-    ]);
-    risk.rugCheck = rugCheckRisk;
-    const riskState = {
-      holderConcentrationPct: risk.status === 'observed' ? risk.top10ConcentrationPct : null,
-      creatorConcentrationPct: risk.status === 'observed' ? risk.creatorConcentrationPct : null,
-      mintAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.mintAuthorityRevoked,
-      freezeAuthorityRevoked: risk.mintAuthority && risk.mintAuthority.freezeAuthorityRevoked,
-      mintInitialized: risk.mintAuthority && risk.mintAuthority.initialized,
-      tokenProgram: risk.mintAuthority && risk.mintAuthority.tokenProgram,
-      walletRisk: rugCheckRisk.status === 'observed' ? rugCheckRisk.walletRisk : 'unknown'
-    };
-    // Every refresh replaces the prior measurements; provider failures reset gates to unknown.
-    pressureStore.updateHolderRisk(mint, riskState);
-    persistence.save(mint, 'risk', Date.now(), riskState).catch(() => {});
-    return sendJson(res, 200, { mint, risk, automaticTrading: false });
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return sendJson(res, 400, { error: 'valid mint required' });
+    const result = await refreshRisk(mint);
+    if (result && result.rateLimited) {
+      res.setHeader('Retry-After', String(result.retryAfterSeconds));
+      return sendJson(res, 429, { ok: false, error: 'Risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: result.retryAfterSeconds });
+    }
+    return sendJson(res, 200, { mint, risk: result.risk, automaticTrading: false });
   }
 
   if (url.pathname === '/api/alerts') {
@@ -763,6 +810,7 @@ server.listen(PORT, HOST, () => {
     connectPumpPortal();
     if (heliusTradeStream) heliusTradeStream.start();
     setInterval(refreshMarketData, DEX_REFRESH_MS);
+    setInterval(() => { processRiskQueue().catch(() => {}); }, RISK_QUEUE_INTERVAL_MS);
   }
 
   persistence.initialize().then(async result => {
@@ -779,7 +827,8 @@ server.listen(PORT, HOST, () => {
             if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
           }
         }
-        console.log('Pressure persistence recovery:', { mints: mints.length, restored });
+        for (const mint of mints) queueRiskLookup(mint);
+        console.log('Pressure persistence recovery:', { mints: mints.length, restored, riskQueued: riskQueue.length });
       } catch (error) {
         console.error('Pressure persistence recovery failed; continuing in memory mode:', error.message);
       }
