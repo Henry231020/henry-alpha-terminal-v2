@@ -528,7 +528,8 @@ const server = http.createServer(async (req, res) => {
 
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
-    const risk = await heliusRisk.getHolderRisk(mint);
+    const token = tokens.get(mint);
+    const risk = await heliusRisk.getHolderRisk(mint, { creatorWallet: token && token.traderPublicKey });
     if (risk.status === 'observed') {
       pressureStore.updateHolderRisk(mint, {
         holderConcentrationPct: risk.top10ConcentrationPct,
