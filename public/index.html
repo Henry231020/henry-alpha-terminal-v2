@@ -190,7 +190,7 @@ function renderTokens(){
     const img='<span class="token-avatar">'+initials+'</span>'+(t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'');
     return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
       '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
-      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
+      '<td><div>'+money(t.priceUsd)+'</div><div class="muted">Jupiter: '+money(t.jupiterPriceUsd)+'</div></td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
   }).join('');
   $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
 }
@@ -211,7 +211,8 @@ function renderDetail(t,events=[],notes={}){
     '<h2>'+escapeHtml(t.name||'Unknown token')+'</h2><div class="muted">'+escapeHtml(t.symbol||'')+'</div>'+
     '<div style="margin-top:12px;overflow-wrap:anywhere"><div class="muted">TOKEN MINT</div><code>'+escapeHtml(t.mint)+'</code> <button id="copyMint" style="padding:5px 8px">Copy</button></div>'+
     '<div class="detail-grid">'+
-    stat('Price',money(t.priceUsd))+stat('Market cap',money(t.marketCapUsd))+
+    stat('DexScreener price',money(t.priceUsd))+stat('Jupiter reference',money(t.jupiterPriceUsd))+
+    stat('Jupiter vs DEX',t.jupiterPriceDifferencePct==null?'—':(t.jupiterPriceDifferencePct>0?'+':'')+t.jupiterPriceDifferencePct.toFixed(2)+'%')+stat('Market cap',money(t.marketCapUsd))+
     stat('Liquidity',money(t.liquidityUsd))+stat('24h volume',money(t.volume24h))+
     stat('24h buys',number(t.buys24h))+stat('24h sells',number(t.sells24h))+
     stat('24h change',changeText)+stat('Age since event',ageText(t.firstSeenAt))+
