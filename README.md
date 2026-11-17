@@ -18,7 +18,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 
 - **No automatic trading is enabled.** This build does not sign transactions, connect to a trading wallet, or submit swaps.
 - Early buyers means the earliest wallets observed by the configured feed after the token's first-seen event. It does not prove the first on-chain buyers.
-- EMA/RSI values are calculated from sampled DexScreener prices grouped into minute buckets, not exchange-native historical OHLCV. Indicators remain unavailable until enough samples exist.
+- EMA/RSI values are calculated from sampled DexScreener prices grouped into UTC minute buckets, not exchange-native historical OHLCV. The server retains up to six hours of samples; indicators remain unavailable until enough observations exist.
 - PumpPortal launch/migration events are not a complete transaction tape. Token-trade subscription access requires a valid `PUMPPORTAL_API_KEY`.
 - Holder concentration is not a complete token-safety verdict. Unknown or partial risk data must remain unknown.
 - The app is a long-running Node.js service. A static website or serverless function alone cannot keep its outbound PumpPortal WebSocket open continuously.
@@ -34,11 +34,11 @@ npm start
 
 Open the dashboard at `http://localhost:3000`.
 
-## Configuration
+## Container deployment\n\nA production-ready `Dockerfile` is included. Build and run it on an always-on Linux host with Docker. Set secrets as environment variables in the host dashboard; do not bake them into the image. Configure a persistent PostgreSQL database if observation history must survive container restarts.\n\n**Hosting warning:** many free web-hosting plans sleep when idle or impose short runtime limits. That disconnects the PumpPortal WebSocket and causes missed launches/trades. A static site host or a sleeping free web service is not suitable for continuous monitoring. Confirm the host is always-on and check its current costs before deploying.\n\n## Configuration
 
 Copy `.env.example` into a local `.env` file or set the variables in your hosting provider. Never commit real credentials.
 
-- `PUMPPORTAL_API_KEY`: optional for launch/migration discovery; required for token-trade subscriptions and observed wallet activity.
+- `PUMPPORTAL_API_KEY`: optional for launch/migration discovery; required for token-trade subscriptions and observed wallet activity. Without it, early-buyer and trade-pressure features cannot populate.
 - `HELIUS_API_KEY`: optional holder-account enrichment.
 - `DATABASE_URL`: optional PostgreSQL persistence.
 - `PORT`: web server port.
@@ -52,7 +52,7 @@ Copy `.env.example` into a local `.env` file or set the variables in your hostin
 - `GET /api/token/:mint` — token and latest market snapshot.
 - `GET /api/pressure?mint=:mint` — observed buy/sell pressure.
 - `GET /api/indicators/:mint` — sampled 1-minute EMA 9/20/50 and RSI 14.
-- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time.
+- `GET /api/early-buyers/:mint` — earliest observed buyer wallets after first-seen time. Requires the token-trade feed and records only wallets observed by that feed.\n- Holder-risk lookups are globally rate-limited to five requests per minute and cached per mint for five minutes to protect RPC quotas.
 - `GET /api/risk/:mint` — holder concentration observation.
 - `GET /api/alerts?mint=:mint` — persisted alert history when PostgreSQL is configured.
 
