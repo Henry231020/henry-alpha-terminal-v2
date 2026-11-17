@@ -14,9 +14,11 @@ const { createRateLimiter } = require('./lib/rate-limit');
 const { createHeliusTradeStream } = require('./lib/helius-trade-stream');
 const { createRugCheckClient } = require('./lib/rugcheck-risk');
 const { fromEnvironment: createPaperTraderFromEnvironment } = require('./lib/paper-trader');
+const { createJupiterPriceClient } = require('./lib/jupiter-price');
 const heliusRisk = createHeliusRiskClient();
 const rugCheck = createRugCheckClient();
 const paperTrader = createPaperTraderFromEnvironment();
+const jupiterPriceClient = createJupiterPriceClient();
 const allowHolderRiskLookup = createRateLimiter({ limit: 5, windowMs: 60000 });
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
@@ -429,16 +431,24 @@ async function fetchDexPairs(mint) {
   return market;
 }
 
-async function refreshOneToken(mint) {
+async function refreshOneToken(mint, jupiterPrice = null) {
   try {
     const market = await fetchDexPairs(mint);
     const prior = tokens.get(mint);
 
     if (!prior || !market) return;
 
+    const jupiterPriceUsd = jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.usdPrice : null;
     const merged = {
       ...prior,
       ...market,
+      jupiterPriceUsd,
+      jupiterPriceBlockId: jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.blockId : null,
+      jupiterPriceChange24h: jupiterPrice && jupiterPrice.status === 'observed' ? jupiterPrice.priceChange24h : null,
+      jupiterPriceDifferencePct: jupiterPriceUsd !== null && Number.isFinite(Number(market.priceUsd)) && Number(market.priceUsd) > 0
+        ? Number(((jupiterPriceUsd / Number(market.priceUsd) - 1) * 100).toFixed(2))
+        : null,
+      jupiterPriceStatus: jupiterPrice && jupiterPrice.status || 'unavailable',
       name: market.baseName || prior.name,
       symbol: market.baseSymbol || prior.symbol,
       updatedAt: new Date().toISOString()
@@ -477,9 +487,10 @@ async function refreshMarketData() {
 
   try {
     const list = [...tokens.keys()].slice(0, 20);
+    const jupiterPrices = await jupiterPriceClient.getPrices(list);
 
     for (const mint of list) {
-      await refreshOneToken(mint);
+      await refreshOneToken(mint, jupiterPrices[mint] || null);
       await new Promise(resolve => setTimeout(resolve, 350));
     }
 
@@ -598,6 +609,7 @@ const server = http.createServer(async (req, res) => {
       heliusTradeStream: heliusTradeStream ? heliusTradeStream.stats() : { status: 'not initialized' },
       riskQueue: { queued: riskQueue.length, inFlight: riskRequests.size, maxQueued: MAX_RISK_QUEUE },
       paperTrading: paperTrader.summary(),
+      jupiterPrice: { provider: 'Jupiter Price API V3', mode: 'keyless; 0.5 requests per second', status: 'reference price cross-check only' },
       solUsdPrice,
       pressureEngine: 'Helius standard logs + confirmed transaction balance changes + RugCheck cached risk reports; BUY signals remain risk-gated',
       automaticTrading: false,
@@ -616,6 +628,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 429, { ok: false, error: 'Risk lookup rate limit reached. Try again shortly.', retryAfterSeconds: result.retryAfterSeconds });
     }
     return sendJson(res, 200, { mint, risk: result.risk, automaticTrading: false });
+  }
+
+  if (url.pathname.startsWith('/api/jupiter/price/')) {
+    const mint = decodeURIComponent(url.pathname.slice('/api/jupiter/price/'.length));
+    const price = await jupiterPriceClient.getPrice(mint);
+    return sendJson(res, price.status === 'observed' ? 200 : 503, { mint, ...price, quoteOrSwapExecuted: false });
   }
 
   if (url.pathname === '/api/paper') {
