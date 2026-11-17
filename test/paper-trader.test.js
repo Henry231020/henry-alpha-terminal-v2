@@ -50,7 +50,7 @@ test('stop-loss and trailing-stop exits close simulated positions', () => {
   const stop = stopTrader.onMarketUpdate({ mint: 'mint-stop', priceUsd: 0.8, analysis: {}, now: 110000 });
   assert.equal(stop[0].reason, 'stop-loss');
 
-  const trailTrader = createPaperTrader(config);
+  const trailTrader = createPaperTrader({ ...config, takeProfitPct: 500 });
   trailTrader.onMarketUpdate({ mint: 'mint-trail', priceUsd: 1, analysis: passingAnalysis, now: 100000 });
   trailTrader.onMarketUpdate({ mint: 'mint-trail', priceUsd: 2, analysis: {}, now: 110000 });
   const trail = trailTrader.onMarketUpdate({ mint: 'mint-trail', priceUsd: 1.6, analysis: {}, now: 120000 });
