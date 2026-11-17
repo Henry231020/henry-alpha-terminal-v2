@@ -6,7 +6,7 @@ This is the deployment plan for controlling HENRY ALPHA from an Android tablet w
 
 - **Compute:** Oracle Cloud Always Free Ampere VM, within its Always Free limits (up to 2 OCPUs and 12 GB RAM). Availability depends on the home region; do not upgrade to a paid shape just to get capacity.
 - **Runtime:** Docker Compose. The Node.js scanner and PostgreSQL database restart automatically and PostgreSQL data persists in a Docker volume.
-- **Chain data:** PumpPortal free launch/migration notifications plus Helius standard Solana WebSockets and confirmed transaction lookups. PumpPortal's metered trade-subscription endpoint is not used.
+- **Chain data:** PumpPortal free launch/migration notifications plus Helius standard Solana WebSockets and confirmed transaction lookups. PumpPortal's metered trade-subscription endpoint is not used. Free RugCheck cached reports add token-risk and insider-network signals; no RugCheck API key is needed.
 - **Private tablet access:** Tailscale Personal plan plus Tailscale Serve HTTPS. Only devices signed into the same private tailnet can reach the dashboard.
 - **Trading:** discovery, indicators, risk observations and alerts only. No wallet signer, Jupiter swap execution or automatic trading.
 
@@ -34,7 +34,7 @@ nano .env
 
 Set only these private values in `.env`:
 
-- `HELIUS_API_KEY`: your Helius Mainnet API key.
+- `HELIUS_API_KEY`: your Helius Mainnet API key. RugCheck uses its unauthenticated free cached-report endpoint and is throttled to one request per second.
 - `POSTGRES_PASSWORD`: a long, unique random password.
 
 Keep the other example values unless we deliberately change them. Never paste `.env`, the Helius key, or any wallet key into chat or GitHub.
@@ -76,6 +76,6 @@ The status endpoint must show PumpPortal connected and Helius standard logs conn
 - Helius Free currently includes a monthly credit allowance and request-rate limit. WebSocket traffic and transaction lookups consume resources; monitor the Helius dashboard.
 - Early buyers means earliest wallets our parser observed after the token first-seen event, not a guarantee of the first on-chain buyers.
 - SOL trade size is estimated from signer balance changes and may include transaction effects. It is not an exact fill receipt.
-- Holder concentration alone is not a full rug-pull check. Unknown wallet risk blocks buy alerts.
+- Helius holder/mint checks and RugCheck's cached report are partial signals, not a full rug-pull guarantee. RugCheck free reports may be stale; unknown or incomplete data blocks buy alerts.
 - A VM, network, provider or database can still fail. The service reconnects to its feeds, but it cannot recover events missed while offline unless a later backfill is added.
 - Never import a funded wallet or enable live trading during initial deployment. We will validate the scanner and alerts first.
