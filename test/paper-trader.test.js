@@ -47,7 +47,7 @@ test('opens and closes simulated positions at take-profit without sending transa
 test('stop-loss and trailing-stop exits close simulated positions', () => {
   const stopTrader = createPaperTrader(config);
   stopTrader.onMarketUpdate({ mint: 'mint-stop', priceUsd: 1, analysis: passingAnalysis, now: 100000 });
-  const stop = stopTrader.onMarketUpdate({ mint: 'mint-stop', priceUsd: 0.79, analysis: {}, now: 110000 });
+  const stop = stopTrader.onMarketUpdate({ mint: 'mint-stop', priceUsd: 0.8, analysis: {}, now: 110000 });
   assert.equal(stop[0].reason, 'stop-loss');
 
   const trailTrader = createPaperTrader({ ...config, takeProfitPct: 500 });
@@ -60,7 +60,7 @@ test('stop-loss and trailing-stop exits close simulated positions', () => {
 test('daily loss limit and maximum open positions block new entries', () => {
   const trader = createPaperTrader({ ...config, positionSizeUsd: 50, stopLossPct: 20, dailyLossLimitUsd: 9, maxOpenPositions: 1 });
   trader.onMarketUpdate({ mint: 'mint-a', priceUsd: 1, analysis: passingAnalysis, now: Date.parse('2026-11-17T00:00:00Z') });
-  trader.onMarketUpdate({ mint: 'mint-a', priceUsd: 0.79, analysis: {}, now: Date.parse('2026-11-17T00:01:00Z') });
+  trader.onMarketUpdate({ mint: 'mint-a', priceUsd: 0.8, analysis: {}, now: Date.parse('2026-11-17T00:01:00Z') });
   const blocked = trader.onMarketUpdate({ mint: 'mint-b', priceUsd: 1, analysis: passingAnalysis, now: Date.parse('2026-11-17T00:02:00Z') });
   assert.equal(blocked.length, 0);
 });
