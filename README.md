@@ -8,7 +8,7 @@ Mobile-friendly Solana token discovery and market-intelligence dashboard. The se
 - Helius standard WebSocket monitoring of Pump.fun and PumpSwap program logs, followed by confirmed transaction lookups for observed buy/sell activity.
 - DexScreener market snapshots with caching and rate-limit backoff.
 - Observed buy/sell pressure alerts with explicit data-quality and risk gates.
-- Helius-backed holder concentration, creator-wallet share, mint-authority and freeze-authority checks, plus standard WebSocket trade observation when a Helius API key is configured.
+- Helius-backed holder concentration, creator-wallet share, mint-authority and freeze-authority checks; free RugCheck reports for token risk and insider indicators; and standard WebSocket trade observation when a Helius API key is configured.
 - EMA 9/20/50 and RSI 14 from locally observed price samples grouped into UTC one-minute buckets.
 - Earliest observed buyer summaries from the subscribed trade feed.
 - Tablet-friendly dashboard, token details, Solscan and DexScreener links.
@@ -38,7 +38,7 @@ Open the dashboard at `http://localhost:3000`.
 
 Copy `.env.example` into a local `.env` file or set the variables in your hosting provider. Never commit real credentials.
 
-- `HELIUS_API_KEY`: used for standard Solana WebSocket logs and confirmed transaction lookups. The free plan has usage limits; monitor credit consumption.\n- PumpPortal is used only for its free token-creation and migration notifications. Its metered trade-subscription endpoint is not used.
+- `HELIUS_API_KEY`: used for standard Solana WebSocket logs, confirmed transaction lookups, holder scans and mint-account checks. The free plan has usage limits; monitor credit consumption.\n- RugCheck's unauthenticated cached token-report endpoint is used for risk/insider signals and is throttled to one request per second; no RugCheck API key is required.\n- PumpPortal is used only for its free token-creation and migration notifications. Its metered trade-subscription endpoint is not used.
 - `HELIUS_API_KEY`: optional holder-account enrichment.
 - `DATABASE_URL`: optional PostgreSQL persistence.
 - `PORT`: web server port.
