@@ -32,3 +32,8 @@ test('wallet coverage is shown as unverified rather than zero when evidence is m
   assert.match(html, /earlyVerified\?number\(wi\.earlyBuyers\):'UNVERIFIED'/);
   assert.doesNotMatch(html, /number\(wi\.uniqueBuyers\|\|0\)/);
 });
+
+test('live feed diagnostics show trades rejected for stale SOL/USD quotes', () => {
+  assert.match(html, /id="feedStaleValuations"/);
+  assert.match(html, /fd\.stalePriceValuations/);
+});
