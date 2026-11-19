@@ -131,3 +131,16 @@ test('old or future-dated liquidity observations cannot pass the freshness gate'
   store.updateLiquidity('mint',30000,now+6000);
   assert.equal(store.analyse('mint').gates.liquidityOk,false);
 });
+
+
+test('pressure store refreshes active mints before LRU eviction',()=>{
+  const { MAX_TRACKED_MINTS } = require('../lib/pressure-store');
+  const store = new PressureStore();
+  for (let i = 0; i < MAX_TRACKED_MINTS; i++) store.updateLiquidity('mint-' + i, 10000);
+  store.updateLiquidity('mint-0', 12000);
+  store.updateLiquidity('mint-new', 15000);
+  assert.equal(store.byMint.has('mint-0'), true);
+  assert.equal(store.byMint.has('mint-1'), false);
+  assert.equal(store.byMint.has('mint-new'), true);
+  assert.equal(store.byMint.size, MAX_TRACKED_MINTS);
+});
