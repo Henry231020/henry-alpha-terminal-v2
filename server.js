@@ -221,7 +221,7 @@ function addEvent(payload) {
 }
 
 async function getSolUsdPrice() {
-  if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return solUsdPrice;
+  if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return { price: solUsdPrice, checkedAt: solUsdCheckedAt };
   if (solUsdRequest) return solUsdRequest;
   solUsdRequest = (async () => {
     try {
@@ -229,8 +229,8 @@ async function getSolUsdPrice() {
       if (!response.ok) return null;
       const body = await response.json();
       const price = safeNumber(body?.solana?.usd);
-      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); }
-      return price;
+      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); return { price, checkedAt: solUsdCheckedAt }; }
+      return null;
     } catch (_) { return null; }
   })();
   try { return await solUsdRequest; } finally { solUsdRequest = null; }
@@ -241,6 +241,7 @@ function subscribeMintTrades(mint) {
 
 const pendingTrades = [];
 const MAX_PENDING_TRADES = 500;
+const MAX_TRADE_QUOTE_AGE_MS = 60000;
 
 function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   // Cool down each mint/signal pair independently: a BUY alert must not suppress
@@ -254,11 +255,19 @@ function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   return true;
 }
 
-function recordTradeAtPrice(item, price) {
+function recordTradeAtPrice(item, quote) {
   const { mint, side, solAmount, wallet, timestamp } = item;
+  const price = Number(quote && quote.price);
+  const quoteCheckedAt = Number(quote && quote.checkedAt);
+  const quoteAgeMs = quoteCheckedAt - timestamp;
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(quoteCheckedAt) || Math.abs(quoteAgeMs) > MAX_TRADE_QUOTE_AGE_MS) {
+    feedDiagnostics.recordStalePriceValuation();
+    return;
+  }
   const usdValue = solAmount * price;
+  if (!Number.isFinite(usdValue) || usdValue <= 0) { feedDiagnostics.recordStalePriceValuation(); return; }
   const tokenFirstSeenAt = tokens.get(mint)?.firstSeenAt || null;
-  const trade = { side, timestamp, usdValue, wallet, tokenFirstSeenAt };
+  const trade = { side, timestamp, usdValue, solUsdPrice: price, solUsdQuoteAt: new Date(quoteCheckedAt).toISOString(), solUsdQuoteAgeMs: quoteAgeMs, usdValueApproximate: Math.abs(quoteAgeMs) > 30000, wallet, tokenFirstSeenAt };
   const accepted = pressureStore.recordTrade(mint, trade);
   if (!accepted) {
     feedDiagnostics.recordStoreRejected();
@@ -270,7 +279,7 @@ function recordTradeAtPrice(item, price) {
   const analysis = pressureStore.analyse(mint);
   const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
   if (isAlertSignal) recordPressureAlert(mint, analysis.signal, analysis, timestamp);
-  broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
+  broadcast({ type: 'trade-observation', mint, side, usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: quoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
 function processTradeMessage(data) {
@@ -281,12 +290,12 @@ function processTradeMessage(data) {
   }
   feedDiagnostics.recordValidTrade();
   const item = { ...parsedTrade.trade, timestamp: Date.now() };
-  getSolUsdPrice().then(price => {
-    if (!price) {
+  getSolUsdPrice().then(quote => {
+    if (!quote || !quote.price) {
       feedDiagnostics.recordPriceUnavailable();
       // Retain a bounded queue so a temporary price-provider outage does not
       // discard otherwise valid trades. Expire old items before retrying.
-      const cutoff = Date.now() - 5 * 60 * 1000;
+      const cutoff = Date.now() - MAX_TRADE_QUOTE_AGE_MS;
       while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
       if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
       pendingTrades.push(item);
@@ -295,8 +304,8 @@ function processTradeMessage(data) {
     const cutoff = Date.now() - 5 * 60 * 1000;
     while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
     const queued = pendingTrades.splice(0, pendingTrades.length);
-    for (const pending of queued) recordTradeAtPrice(pending, price);
-    recordTradeAtPrice(item, price);
+    for (const pending of queued) recordTradeAtPrice(pending, quote);
+    recordTradeAtPrice(item, quote);
   }).catch(() => {
     feedDiagnostics.recordPriceUnavailable();
     if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
