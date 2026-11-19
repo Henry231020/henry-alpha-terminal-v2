@@ -61,3 +61,5 @@ Token metadata retrieval accepts HTTPS URLs only, rejects credentials, non-stand
 Pressure-store and wallet-intelligence maps now refresh active records before eviction, using least-recently-used retention so frequently observed tokens and wallets are less likely to be discarded during token churn.
 
 API `limit` query parameters are parsed as bounded safe integers; missing or malformed values use endpoint defaults instead of propagating `NaN` into persistence queries or result slicing.
+
+Dashboard wallet-activity counts distinguish missing observations from a measured zero; early-buyer counts remain `UNVERIFIED` when token first-seen coverage is unavailable. Trade-observation WebSocket updates use the validated USD valuation object. BUY SETUP and SELL / EXIT WARNING decisions are included in the saved and broadcast alert stream, alongside pressure-only alerts when full technical decisions are not ready. Burst-history eviction uses a queue cursor with periodic compaction to avoid repeated O(n) array shifts at high event rates.
