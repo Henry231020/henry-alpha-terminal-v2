@@ -659,6 +659,35 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, recentEvents);
   }
 
+  if (url.pathname.startsWith('/api/token/')) {
+    let mint;
+    try {
+      mint = decodeURIComponent(url.pathname.slice('/api/token/'.length));
+    } catch (_) {
+      return sendJson(res, 400, { ok: false, error: 'Invalid token address encoding' });
+    }
+    const token = tokens.get(mint);
+    if (!token) return sendJson(res, 404, { ok: false, error: 'Token not found in the current discovery session' });
+
+    // Selecting a token promotes its live trade subscription and requests a fresh
+    // market quote, even when it is outside the background scanner's newest-20 window.
+    subscribeMintTrades(mint);
+    await refreshOneToken(mint);
+    const current = tokens.get(mint) || token;
+    const recentTokenEvents = recentEvents
+      .filter(event => event && event.data && event.data.mint === mint)
+      .slice(0, 20);
+    const marketNote = current.priceUsd > 0
+      ? 'DexScreener quote · last checked ' + current.checkedAt
+      : 'No valid DexScreener quote is available yet; market and indicator data remain unverified.';
+    return sendJson(res, 200, {
+      token: current,
+      recentEvents: recentTokenEvents,
+      dataNotes: { market: marketNote },
+      automaticTrading: false
+    });
+  }
+
   if (url.pathname === '/api/tokens') {
     const query = (url.searchParams.get('q') || '').toLowerCase();
     const sort = url.searchParams.get('sort') || 'newest';
