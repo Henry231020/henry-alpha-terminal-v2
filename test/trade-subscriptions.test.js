@@ -20,3 +20,22 @@ test('does not subscribe while disconnected and can unsubscribe', () => {
   assert.equal(ws.sent[1].method,'unsubscribeTokenTrade');
   assert.equal(manager.stats().subscribedMints,0);
 });
+
+test('rotates the oldest subscription when a new token needs a live feed slot', () => {
+  const ws = socket(); const manager = new TradeSubscriptionManager({ socket: ws, maxSubscriptions: 2 });
+  assert.equal(manager.subscribeLatest('mint-a'), true);
+  assert.equal(manager.subscribeLatest('mint-b'), true);
+  assert.equal(manager.subscribeLatest('mint-c'), true);
+  assert.deepEqual(manager.stats(), { subscribedMints: 2, maxSubscriptions: 2 });
+  assert.deepEqual(ws.sent.map(item => item.method), [
+    'subscribeTokenTrade','subscribeTokenTrade','unsubscribeTokenTrade','subscribeTokenTrade'
+  ]);
+  assert.deepEqual([...manager.mints], ['mint-b','mint-c']);
+});
+test('does not evict existing subscriptions while the socket is disconnected', () => {
+  const ws = socket(); const manager = new TradeSubscriptionManager({ socket: ws, maxSubscriptions: 1 });
+  manager.subscribe('mint-a');
+  ws.readyState = 3;
+  assert.equal(manager.subscribeLatest('mint-b'), false);
+  assert.deepEqual([...manager.mints], ['mint-a']);
+});
