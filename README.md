@@ -84,3 +84,8 @@ Use this checklist after starting the existing Codespace. It verifies the feed w
 6. Confirm live alert updates and paper-trade records in the dashboard. Paper entries are simulations only.
 
 Do not enable or infer live execution from these checks: this version has no transaction signing or real-money order execution. Codespace runtime verification must be performed in the running Codespace; GitHub Actions tests cannot verify external provider credentials or live websocket compatibility.
+
+
+### DexScreener price orientation
+
+Market data is accepted only from a pair whose base-token or quote-token address matches the requested mint. When the mint is the quote token, its USD price and 24-hour percentage move are inverted from the base-token values using the pair's native price ratio. Quote-side market-cap values are left unavailable rather than incorrectly assigning the base token's market cap to the requested mint. Pools without a valid target-token USD price are skipped.
