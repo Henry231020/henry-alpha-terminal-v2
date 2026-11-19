@@ -163,6 +163,13 @@ const shortMint=m=>m&&m.length>16?m.slice(0,7)+'…'+m.slice(-6):(m||'—');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateText=d=>{if(!d)return '—';const t=Date.parse(d);return Number.isFinite(t)?new Date(t).toLocaleString():'—';};
 const ageText=d=>{const t=Date.parse(d||'');if(!Number.isFinite(t))return '—';const m=Math.max(0,Math.floor((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.floor(m/60)+'h':Math.floor(m/1440)+'d';};
+function walletCoverageMarkup(wi){
+  const hasRows=Number(wi?.observedWallets)>0;
+  const earlyVerified=String(wi?.coverage||'').startsWith('Observed wallet-labelled trades since');
+  return 'Unique observed buyers: '+escapeHtml(hasRows?number(wi.uniqueBuyers):'UNVERIFIED')+
+    ' · Early buyers (first 5 min): '+escapeHtml(earlyVerified?number(wi.earlyBuyers):'UNVERIFIED')+
+    ' · Early buyers seen across multiple tokens: '+escapeHtml(earlyVerified?number(wi.repeatEarlyBuyers):'UNVERIFIED')+'<br>';
+}
 function riskMarkup(result){
   const h=result?.risk||{}, r=result?.rugcheck||{};
   const holderObserved=h.status==='observed'&&Number.isFinite(Number(h.top10ConcentrationPct));
@@ -299,7 +306,7 @@ async function selectToken(mint){
           '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
         const wi = pressure.walletIntelligence || {};
         panel.innerHTML += '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>' +
-          'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers (first 5 min): '+escapeHtml(number(wi.earlyBuyers||0))+' · Early buyers seen across multiple tokens: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>' +
+          walletCoverageMarkup(wi) +
           (wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong><br>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.<br>') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.<br>') +
           '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span>' +
           (wi.wallets&&wi.wallets.length ? '<div class="muted" style="margin-top:6px">First observed early buyers: '+wi.wallets.slice(0,5).map(x=>escapeHtml(shortMint(x.wallet))+' ('+escapeHtml(number(x.tokensSeen))+' tokens seen)').join(' · ')+'</div>' : '');
