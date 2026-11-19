@@ -108,3 +108,12 @@ test('expired RugCheck cache entries are refreshed rather than reused',async()=>
   assert.equal(calls,2);
   assert.notEqual(refreshed.cached,true);
 });
+
+
+test('any RugCheck finding prevents a low-risk classification even with a low score',async()=>{
+  const finding=report({risks:[{name:'Warning',level:'warn',description:'Review required'}]});
+  const client=createRugCheckRiskClient({fetchImpl:async()=>({ok:true,json:async()=>finding})});
+  const result=await client.getTokenRisk('So11111111111111111111111111111111111111112');
+  assert.equal(result.status,'observed');
+  assert.equal(result.walletRisk,'medium');
+});
