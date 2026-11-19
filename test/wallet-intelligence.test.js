@@ -39,3 +39,16 @@ test('a wallet that trades a second token late is not counted as a repeat early 
   x.recordTrade('mint-b',{wallet:'late-wallet',side:'buy',timestamp:now-1000,usdValue:5},firstB);
   assert.equal(x.analyse('mint-a',firstA).repeatEarlyBuyers,0);
 });
+
+test('enforces a global wallet-token pair memory cap across tokens',()=>{
+  let now=9000000;
+  const x=new WalletIntelligence({clock:()=>now,maxWalletPairs:2,maxWalletsPerMint:2});
+  const first=new Date(now-1000).toISOString();
+  x.recordTrade('mint-a',{wallet:'wallet-1',side:'buy',timestamp:now-900,usdValue:1},first);
+  x.recordTrade('mint-b',{wallet:'wallet-2',side:'buy',timestamp:now-800,usdValue:1},first);
+  x.recordTrade('mint-c',{wallet:'wallet-3',side:'buy',timestamp:now-700,usdValue:1},first);
+  assert.equal(x.walletPairOrder.size,2);
+  assert.equal(x.byMint.get('mint-a').wallets.size,0);
+  assert.equal(x.byMint.get('mint-b').wallets.size,1);
+  assert.equal(x.byMint.get('mint-c').wallets.size,1);
+});
