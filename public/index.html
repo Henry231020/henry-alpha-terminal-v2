@@ -86,6 +86,20 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <div class="muted" style="margin-top:10px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
   </section>
 
+  <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><h2>PAPER TRADE LEARNING & REVIEW</h2><span class="pill">SIMULATED · NO REAL ORDERS</span></div>
+    <div class="detail" id="learningPanel">
+      <div class="detail-grid" style="margin:0">
+        <div class="detail-stat"><div class="label">CLOSED PAPER TRADES</div><div class="value" id="learnClosed">0</div></div>
+        <div class="detail-stat"><div class="label">WIN RATE</div><div class="value" id="learnWinRate">—</div></div>
+        <div class="detail-stat"><div class="label">AVERAGE PAPER P&L</div><div class="value" id="learnAvgPnl">—</div></div>
+        <div class="detail-stat"><div class="label">OPEN PAPER POSITIONS</div><div class="value" id="learnOpen">0</div></div>
+      </div>
+      <div class="muted" id="learnNote" style="margin-top:12px">Waiting for paper-trade outcomes. The system does not change strategy rules automatically.</div>
+      <div id="learnRecent" style="margin-top:10px"></div>
+    </div>
+  </section>
+
   <div class="controls">
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
     <select id="sort">
@@ -280,8 +294,8 @@ async function selectToken(mint){
 }
 async function refreshAll(){
   try{
-    const [status,list,events]=await Promise.all([
-      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events')
+    const [status,list,events,learning]=await Promise.all([
+      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8')
     ]);
     state.tokens=list.tokens||[];
     state.events=events||[];
@@ -297,6 +311,13 @@ async function refreshAll(){
     $('feedMalformed').textContent=number(fd.malformedJsonMessages);
     $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+' · Last recorded: '+(fd.lastRecordedTradeAt?dateText(fd.lastRecordedTradeAt):'none yet')+(fd.lastProcessingIssue?' · Processing issue: '+fd.lastProcessingIssue:'')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+'. Counts reset when server restarts; live format not independently verified.';
     $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
+    $('learnClosed').textContent=number(learning.closedTrades||0);
+    $('learnWinRate').textContent=learning.winRatePct==null?'—':learning.winRatePct+'%';
+    $('learnAvgPnl').textContent=learning.averagePnlPct==null?'—':(learning.averagePnlPct>0?'+':'')+learning.averagePnlPct+'%';
+    $('learnAvgPnl').className='value '+(learning.averagePnlPct>0?'green':learning.averagePnlPct<0?'red':'');
+    $('learnOpen').textContent=number(learning.openPaperPositions||0);
+    $('learnNote').textContent=(learning.learningNote||'Learning summary unavailable')+' Historical paper outcomes are descriptive, not proof of causation.';
+    $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
     renderTokens();renderEvents();
     if(state.selectedMint){
       const current=state.tokens.find(t=>t.mint===state.selectedMint);
