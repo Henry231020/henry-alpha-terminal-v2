@@ -39,3 +39,19 @@ test('does not evict existing subscriptions while the socket is disconnected', (
   assert.equal(manager.subscribeLatest('mint-b'), false);
   assert.deepEqual([...manager.mints], ['mint-a']);
 });
+
+
+test('socket send failures do not corrupt subscription bookkeeping',()=>{
+  const ws=socket();
+  const manager=new TradeSubscriptionManager({socket:ws,maxSubscriptions:1});
+  ws.send=()=>{throw new Error('socket closed during send');};
+  assert.equal(manager.subscribe('mint-a'),false);
+  assert.equal(manager.stats().subscribedMints,0);
+  ws.send=socket().send.bind(socket());
+  assert.equal(manager.subscribe('mint-a'),true);
+  ws.send=()=>{throw new Error('socket closed during unsubscribe');};
+  assert.equal(manager.unsubscribe('mint-a'),false);
+  assert.deepEqual([...manager.mints],['mint-a']);
+  assert.equal(manager.subscribeLatest('mint-b'),false);
+  assert.deepEqual([...manager.mints],['mint-a']);
+});
