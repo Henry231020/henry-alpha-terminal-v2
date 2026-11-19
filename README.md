@@ -51,3 +51,6 @@ The dashboard is served by the Node process on `PORT` (default 3000). The `/heal
 
 
 Wallet-intelligence memory is bounded across the whole session: token-wallet pairs have a global cap, each token has a wallet cap, and burst-event history has a global cap of 100,000 events. Older burst events are evicted first; this can reduce historical burst coverage but cannot create a false coordinated-burst signal.
+
+
+Trade USD valuation uses a timestamped SOL/USD quote. Quotes more than 60 seconds before or after the observed trade are rejected rather than allowed to distort buy/sell pressure; quote age and whether the USD estimate is approximate are retained with accepted trade observations. Pending trades expire outside this same freshness window.
