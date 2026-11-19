@@ -87,6 +87,11 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
   </section>
 
   <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><h2>LIVE URGENT BUY / SELL ALERTS</h2><span class="pill">RECENT · MEMORY + DATABASE</span></div>
+    <div class="events" id="urgentAlertRows"><div class="empty">No urgent pressure alerts received yet.</div></div>
+  </section>
+
+  <section class="panel" style="margin-bottom:18px">
     <div class="panel-head"><h2>PAPER TRADE LEARNING & REVIEW</h2><span class="pill">SIMULATED · NO REAL ORDERS</span></div>
     <div class="detail" id="learningPanel">
       <div class="detail-grid" style="margin:0">
@@ -140,7 +145,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const state={tokens:[],events:[],pressureByMint:{},riskByMint:{},riskLoadingByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
+const state={tokens:[],events:[],pressureAlerts:[],pressureByMint:{},riskByMint:{},riskLoadingByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
 const money=n=>{
   if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
   n=Number(n);
@@ -208,6 +213,17 @@ function renderTokens(){
       '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td><td><span class="pill '+(String(state.pressureByMint[t.mint]?.action||'').includes('SELL')?'red':String(state.pressureByMint[t.mint]?.action||'').includes('BUY SETUP')?'green':'')+'">'+escapeHtml(state.pressureByMint[t.mint]?.action||'WAIT')+'</span></td></tr>';
   }).join('');
   $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
+}
+function renderPressureAlerts(){
+  const root=$('urgentAlertRows');
+  if(!root)return;
+  if(!state.pressureAlerts.length){root.innerHTML='<div class="empty">No urgent pressure alerts received yet. Alerts appear here even when PostgreSQL is not configured.</div>';return;}
+  root.innerHTML=state.pressureAlerts.slice(0,12).map(alert=>{
+    const signal=String(alert.signal||'Pressure alert');
+    const isSell=signal.includes('DUMP')||signal.includes('SELL');
+    return '<div class="event"><strong class="'+(isSell?'red':'green')+'">'+escapeHtml(signal)+'</strong> · '+escapeHtml(shortMint(alert.mint||''))+
+      '<div class="muted">'+escapeHtml(dateText(alert.receivedAt||alert.observedAt))+' · Alert only; no order was placed.</div></div>';
+  }).join('');
 }
 function renderEvents(){
   $('eventCount').textContent=number(state.events.length);
@@ -304,11 +320,12 @@ async function selectToken(mint){
 }
 async function refreshAll(){
   try{
-    const [status,list,events,learning,pressure]=await Promise.all([
-      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8'),api('/api/pressure?limit=500')
+    const [status,list,events,learning,pressure,recentAlerts]=await Promise.all([
+      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8'),api('/api/pressure?limit=500'),api('/api/alerts/recent?limit=20')
     ]);
     state.tokens=list.tokens||[];
     state.events=events||[];
+    state.pressureAlerts=recentAlerts.alerts||[];
     state.pressureByMint=Object.fromEntries((pressure.pressure||[]).map(item=>[item.mint,item.analysis?.tradeDecision||{action:'WAIT'}]));
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
@@ -336,7 +353,7 @@ const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[
     $('learnExits').innerHTML='<h4 style="margin:10px 0 6px">HOW EXIT SIGNALS PERFORMED</h4>'+
       (exitRows.length?exitRows.map(([name,v])=>'<div class="event">'+escapeHtml(name)+' · '+escapeHtml(number(v.trades))+' exits · '+escapeHtml(number(v.wins))+' wins / '+escapeHtml(number(v.losses))+' losses · Avg '+escapeHtml((v.averagePnlPct>0?'+':'')+v.averagePnlPct+'%')+'</div>').join(''):'<div class="muted">Exit-outcome statistics will appear after paper positions close.</div>');
         $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
-    renderTokens();renderEvents();
+    renderTokens();renderEvents();renderPressureAlerts();
     if(state.selectedMint){
       const current=state.tokens.find(t=>t.mint===state.selectedMint);
       if(current){
@@ -399,6 +416,10 @@ function connectWS(){
         }
         state.events=state.events.slice(0,500);
         renderTokens();renderEvents();
+      }else if(msg.type==='pressure-alert'){
+        state.pressureAlerts.unshift(msg);
+        state.pressureAlerts=state.pressureAlerts.slice(0,20);
+        renderPressureAlerts();
       }else if(msg.type==='market-update'&&msg.token){
         const i=state.tokens.findIndex(t=>t.mint===msg.token.mint);
         if(i>=0)state.tokens[i]=msg.token;
