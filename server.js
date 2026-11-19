@@ -22,6 +22,7 @@ const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuati
 const { isSafeMetadataUrl } = require('./lib/safe-metadata-url');
 const { boundedInteger } = require('./lib/query-limits');
 const { pressureAlertSignal } = require('./lib/pressure-alert');
+const { selectPairForMint, normalisePairForMint } = require('./lib/dex-pair-normalizer');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -350,34 +351,17 @@ async function fetchDexPairs(mint) {
     return null;
   }
 
-  pairs.sort((a, b) =>
-    (Number(b?.liquidity?.usd) || 0) -
-    (Number(a?.liquidity?.usd) || 0)
-  );
-
-  const pair = pairs[0];
-
-  const market = {
-    priceUsd: safeNumber(pair.priceUsd),
-    marketCapUsd: safeNumber(pair.marketCap) ?? safeNumber(pair.fdv),
-    liquidityUsd: safeNumber(pair.liquidity?.usd),
-    volume24h: safeNumber(pair.volume?.h24),
-    txns24h:
-      (safeNumber(pair.txns?.h24?.buys) || 0) +
-      (safeNumber(pair.txns?.h24?.sells) || 0),
-    buys24h: safeNumber(pair.txns?.h24?.buys),
-    sells24h: safeNumber(pair.txns?.h24?.sells),
-    priceChange24h: safeNumber(pair.priceChange?.h24),
-    image: pair.info?.imageUrl || null,
-    pairAddress: pair.pairAddress || null,
-    dexId: pair.dexId || null,
-    dexUrl: pair.url || `https://dexscreener.com/solana/${mint}`,
-    poolCreatedAt: pair.pairCreatedAt || null,
-    baseName: pair.baseToken?.name || null,
-    baseSymbol: pair.baseToken?.symbol || null,
-    source: 'DexScreener',
-    checkedAt: new Date().toISOString()
-  };
+  const pair = selectPairForMint(pairs, mint);
+  if (!pair) {
+    dexNoPairResults++;
+    return null;
+  }
+  const market = normalisePairForMint(pair, mint);
+  if (!market || !Number.isFinite(market.priceUsd) || market.priceUsd <= 0) {
+    dexNoPairResults++;
+    return null;
+  }
+  market.dexUrl = market.dexUrl || `https://dexscreener.com/solana/${mint}`;
   marketCache.set(mint, market);
   return market;
 }
