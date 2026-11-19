@@ -577,10 +577,11 @@ const server = http.createServer(async (req, res) => {
         heliusRisk.getHolderRisk(mint),
         rugCheckRisk.getTokenRisk(mint)
       ]);
-      const current = pressureStore.analyse(mint);
+      // Never carry a previous concentration forward when the current Helius
+      // scan is unavailable or incomplete; unknown must remain unknown.
       const holderConcentrationPct = risk.status === 'observed'
         ? risk.top10ConcentrationPct
-        : current.metrics?.holderConcentrationPct ?? null;
+        : null;
       const riskObservedAt = Number(rugcheck.checkedAt);
       const checkedAt = rugcheck.status === 'observed' && Number.isFinite(riskObservedAt) ? Math.min(Date.now(), riskObservedAt) : Date.now();
       pressureStore.updateHolderRisk(mint, {
