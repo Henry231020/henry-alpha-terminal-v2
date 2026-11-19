@@ -70,3 +70,41 @@ test('explicit null score and insider counts never become zero-risk evidence', a
   assert.equal(result.status, 'unknown');
   assert.equal(result.walletRisk, 'unknown');
 });
+
+
+test('bounds RugCheck cache and evicts least-recently-used reports', async()=>{
+  const calls=[];
+  const client=createRugCheckRiskClient({
+    maxCacheEntries:2,
+    fetchImpl:async url=>{
+      const mint=url.split('/').slice(-2,-1)[0];
+      calls.push(mint);
+      return {ok:true,json:async()=>report({mint})};
+    }
+  });
+  const a='11111111111111111111111111111111';
+  const b='22222222222222222222222222222222';
+  const c='33333333333333333333333333333333';
+  await client.getTokenRisk(a);
+  await client.getTokenRisk(b);
+  await client.getTokenRisk(a); // refresh A's LRU position
+  await client.getTokenRisk(c); // B is now least recently used
+  assert.deepEqual(client.cacheStats(),{entries:2,maxEntries:2});
+  await client.getTokenRisk(a);
+  await client.getTokenRisk(b); // B was evicted, so it must be fetched again
+  assert.equal(calls.filter(mint=>mint===b).length,2);
+  assert.equal(client.cacheStats().entries,2);
+});
+test('expired RugCheck cache entries are refreshed rather than reused',async()=>{
+  let now=1000,calls=0;
+  const mint='So11111111111111111111111111111111111111112';
+  const client=createRugCheckRiskClient({
+    clock:()=>now,cacheTtlMs:100,maxCacheEntries:2,
+    fetchImpl:async()=>{calls++;return {ok:true,json:async()=>report()};}
+  });
+  await client.getTokenRisk(mint);
+  now=1101;
+  const refreshed=await client.getTokenRisk(mint);
+  assert.equal(calls,2);
+  assert.notEqual(refreshed.cached,true);
+});
