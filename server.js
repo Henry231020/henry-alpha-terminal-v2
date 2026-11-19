@@ -12,11 +12,13 @@ const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
 const { WalletIntelligence } = require('./lib/wallet-intelligence');
+const { TradeLearningEngine } = require('./lib/trade-learning');
 const heliusRisk = createHeliusRiskClient();
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
 const walletIntelligence = new WalletIntelligence();
+const tradeLearning = new TradeLearningEngine();
 let tradeSubscriptions = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
@@ -526,6 +528,7 @@ const server = http.createServer(async (req, res) => {
       feedDiagnostics: feedDiagnostics.snapshot(),
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       persistence: persistence.status(),
+      tradeLearning: tradeLearning.summary(10),
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
       solUsdPrice,
       pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
@@ -559,6 +562,11 @@ const server = http.createServer(async (req, res) => {
       ...(row.payload || {})
     }));
     return sendJson(res, 200, { mint, count: alerts.length, alerts, persistence: persistence.status(), automaticTrading: false });
+  }
+
+  if (url.pathname === '/api/learning') {
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+    return sendJson(res, 200, tradeLearning.summary(limit));
   }
 
   if (url.pathname === '/api/wallet-intelligence') {
@@ -760,7 +768,8 @@ server.listen(PORT, HOST, () => {
           // Query is newest-first; replay oldest-first before accepting live events.
           rows.reverse();
           for (const row of rows) {
-            if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
+            if (row.kind === 'paper_trade') { if (tradeLearning.restoreTrade(row.payload)) restored++; }
+            else if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
           }
         }
         console.log('Pressure persistence recovery:', { mints: mints.length, restored });
