@@ -8,19 +8,19 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
 test('dashboard inline JavaScript parses without syntax errors', () => {
-  const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/gi)];
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
   assert.ok(scripts.length > 0, 'dashboard script block is missing');
   for (const script of scripts) assert.doesNotThrow(() => new vm.Script(script[1]));
 });
 
 test('selected token refreshes market data and refreshes its BUY/SELL analysis', () => {
-  assert.match(html, /api\\('\\/api\\/token\\/'\\+encodeURIComponent\\(state\\.selectedMint\\)\\)/);
-  assert.match(html, /api\\('\\/api\\/pressure\\?mint='\\+encodeURIComponent\\(current\\.mint\\)\\)/);
+  assert.match(html, /api\('\/api\/token\/'\+encodeURIComponent\(state\.selectedMint\)\)/);
+  assert.match(html, /api\('\/api\/pressure\?mint='\+encodeURIComponent\(current\.mint\)\)/);
 });
 
 test('paper learning panel renders entry factors and exit outcomes', () => {
-  assert.match(html, /learning\\.factorStats/);
-  assert.match(html, /learning\\.exitStats/);
+  assert.match(html, /learning\.factorStats/);
+  assert.match(html, /learning\.exitStats/);
   assert.match(html, /WHAT ENTRY CONDITIONS HAVE WORKED/);
   assert.match(html, /HOW EXIT SIGNALS PERFORMED/);
 });
