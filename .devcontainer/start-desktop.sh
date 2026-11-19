@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Start a full HD virtual monitor for the remote desktop.
 if ! pgrep -f "Xvfb :1" >/dev/null; then
-  Xvfb :1 -screen 0 1440x900x24 -ac >/tmp/gmgn-xvfb.log 2>&1 &
+  Xvfb :1 -screen 0 1920x1080x24 -ac >/tmp/gmgn-xvfb.log 2>&1 &
 fi
 export DISPLAY=:1
 sleep 2
@@ -16,9 +17,12 @@ fi
 if ! pgrep -f "websockify.*6080" >/dev/null; then
   websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/gmgn-novnc.log 2>&1 &
 fi
+
+# Open GMGN in a maximized kiosk window, like a normal desktop browser.
 if ! pgrep -f "google-chrome.*gmgn.ai" >/dev/null; then
   google-chrome --no-sandbox --disable-dev-shm-usage --disable-gpu \
+    --disable-session-crashed-bubble --no-first-run --kiosk \
     --user-data-dir=/tmp/gmgn-chrome-profile https://gmgn.ai >/tmp/gmgn-chrome.log 2>&1 &
 fi
 
-echo "GMGN remote desktop is starting on port 6080."
+echo "Full-screen GMGN desktop is running on port 6080 (1920x1080)."
