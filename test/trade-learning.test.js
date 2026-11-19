@@ -75,9 +75,9 @@ test('restoring a closed paper trade clears its earlier persisted open entry',()
  assert.equal(engine.summary().closedTrades,1);
 });
 
-test('summary tolerates legacy restored records without entry condition details',()=>{
+test('summary tolerates legacy closed records without entry condition details',()=>{
  const engine=new TradeLearningEngine();
- assert.equal(engine.restoreTrade({mint:'legacy-mint',entryAt:1000,entryPrice:1,status:'open paper trade'}),true);
- assert.equal(engine.summary().openPaperPositions,1);
- assert.equal(engine.summary().conditionStats['entry RSI unknown'].trades,0);
+ assert.equal(engine.restoreTrade({mint:'legacy-mint',entryAt:1000,entryPrice:1,exitAt:2000,exitPrice:1.1,pnlPct:10,outcome:'WIN',status:'closed paper trade'}),true);
+ assert.equal(engine.summary().closedTrades,1);
+ assert.equal(engine.summary().conditionStats['entry RSI unknown'].trades,1);
 });
