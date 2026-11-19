@@ -870,6 +870,7 @@ server.listen(PORT, HOST, () => {
         // Include every currently open paper position even when its mint has
         // been inactive long enough to fall outside the recent-mint window.
         const mints = [...new Set([...openPaperMints, ...recentMints])];
+        const openPaperMintSet = new Set(openPaperMints);
         let restored = 0;
         for (const mint of mints) {
           const rows = await persistence.recent(mint, 1000);
@@ -883,6 +884,13 @@ server.listen(PORT, HOST, () => {
               }
               restored++;
             }
+          }
+          // The entry record for a long-lived open position may be older than
+          // the 1,000-row mixed market-history window. Reapply its latest
+          // paper state after replay so older closed records cannot override it.
+          if (openPaperMintSet.has(mint) && typeof persistence.latestPaperTrade === 'function') {
+            const latestPaperTrade = await persistence.latestPaperTrade(mint);
+            if (latestPaperTrade && tradeLearning.restoreTrade(latestPaperTrade.payload)) restored++;
           }
         }
         console.log('Pressure persistence recovery:', { mints: mints.length, restored });
