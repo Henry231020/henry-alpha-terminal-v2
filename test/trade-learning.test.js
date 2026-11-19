@@ -81,3 +81,19 @@ test('summary tolerates legacy closed records without entry condition details',(
  assert.equal(engine.summary().closedTrades,1);
  assert.equal(engine.summary().conditionStats['entry RSI unknown'].trades,1);
 });
+
+test('reports multi-factor entry condition and exit outcome statistics',()=>{
+ const engine=new TradeLearningEngine();
+ for(const [i,pnl] of [[1,20],[2,-10]]) {
+  assert.equal(engine.restoreTrade({
+   mint:'factor-'+i,entryAt:i*1000,entryPrice:1,exitAt:i*1000+500,exitPrice:1+pnl/100,pnlPct:pnl,
+   outcome:pnl>0?'WIN':'LOSS',status:'closed paper trade',
+   entryConditions:{rsi14:62,imbalancePct:60,acceleration:2.2,liquidityUsd:50000,holderConcentrationPct:15,ema9:1.1,ema50:1},
+   exitConditions:{action:'SELL / EXIT WARNING'}
+  }),true);
+ }
+ const summary=engine.summary();
+ assert.equal(summary.factorStats['buy imbalance: 50-69%'].trades,2);
+ assert.equal(summary.factorStats['buy imbalance: 50-69%'].wins,1);
+ assert.equal(summary.exitStats['SELL / EXIT WARNING'].trades,2);
+});
