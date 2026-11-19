@@ -66,3 +66,21 @@ test('bounds burst-event history globally across token mints',()=>{
   assert.equal(x.byMint.get('mint-b').burst.length,1);
   assert.equal(x.byMint.get('mint-c').burst.length,1);
 });
+
+
+test('active token and wallet records are refreshed before global LRU eviction',()=>{
+  let now=11000000;
+  const x=new WalletIntelligence({clock:()=>now,maxTokens:2,maxWallets:2});
+  const first=new Date(now-1000).toISOString();
+  const trade=(wallet,mint)=>x.recordTrade(mint,{wallet,side:'buy',timestamp:now++,usdValue:1},first);
+  trade('wallet-a','mint-a');
+  trade('wallet-b','mint-b');
+  trade('wallet-a','mint-a');
+  trade('wallet-c','mint-c');
+  assert.equal(x.byMint.has('mint-a'),true);
+  assert.equal(x.byMint.has('mint-b'),false);
+  assert.equal(x.byMint.has('mint-c'),true);
+  assert.equal(x.wallets.has('wallet-a'),true);
+  assert.equal(x.wallets.has('wallet-b'),false);
+  assert.equal(x.wallets.has('wallet-c'),true);
+});
