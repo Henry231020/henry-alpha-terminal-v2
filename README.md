@@ -13,6 +13,7 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 - Tracks early observed buyers, repeat wallets across tokens and short-window wallet bursts. These are review signals, not proof of coordination.
 - Uses Helius holder-account data when configured and RugCheck token reports for authority, risk-score and insider-network checks. Risk evidence expires after five minutes and is refreshed while a token remains selected.
 - Records simulated paper entries/exits and outcome statistics to review which observed conditions worked. It does not automatically change strategy rules.
+- Keeps a bounded recent urgent-alert feed in memory as well as PostgreSQL when configured, so live pressure alerts remain visible without a database.
 - Optionally persists observations and paper-trade records in PostgreSQL.
 
 ## Safety and limitations
