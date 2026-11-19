@@ -11,7 +11,7 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 - Calculates EMA 9/20/50 and RSI 14 from distinct, timestamped price observations.
 - Produces `BUY SETUP`, `WATCHLIST — RISK UNVERIFIED`, `SELL / EXIT WARNING` or `WAIT` decisions with reasons.
 - Tracks early observed buyers, repeat wallets across tokens and short-window wallet bursts. These are review signals, not proof of coordination.
-- Uses Helius holder-account data when configured and RugCheck token reports for authority, risk-score and insider-network checks.
+- Uses Helius holder-account data when configured and RugCheck token reports for authority, risk-score and insider-network checks. Risk evidence expires after five minutes and is refreshed while a token remains selected.
 - Records simulated paper entries/exits and outcome statistics to review which observed conditions worked. It does not automatically change strategy rules.
 - Optionally persists observations and paper-trade records in PostgreSQL.
 
