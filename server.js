@@ -700,6 +700,7 @@ const server = http.createServer(async (req, res) => {
               broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
             }
           }
+        }
 
         return sendJson(res, 200, {
           token: merged,
