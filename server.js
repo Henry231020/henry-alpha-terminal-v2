@@ -19,6 +19,7 @@ const { AlertThrottle } = require('./lib/alert-throttle');
 const { newestTokenMints } = require('./lib/token-priority');
 const { RiskRequestGuard } = require('./lib/risk-request-guard');
 const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuation');
+const { isSafeMetadataUrl } = require('./lib/safe-metadata-url');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -112,7 +113,7 @@ function normalizeToken(mint, data = {}) {
 function resolveMetadataUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   const uri = value.trim();
-  if (/^https:\/\//i.test(uri)) return uri;
+  if (isSafeMetadataUrl(uri)) return uri;
   if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7).replace(/^ipfs\//, '');
   if (uri.startsWith('ar://')) return 'https://arweave.net/' + uri.slice(5);
   return null;
@@ -136,6 +137,7 @@ async function resolveTokenMetadata(token) {
   try {
     const response = await fetch(metadataUrl, {
       headers: { Accept: 'application/json' },
+      redirect: 'error',
       signal: AbortSignal.timeout(7000)
     });
     if (!response.ok) return;
