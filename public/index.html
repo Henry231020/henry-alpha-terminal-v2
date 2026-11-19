@@ -84,7 +84,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
       <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
       <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
     </div>
-    <div class="muted" style="margin-top:10px" id="feedSubscriptions">Token-trade subscriptions: — / — · Helius holder scan: — · PumpPortal trade key: —</div>
+    <div class="muted" style="margin-top:10px" id="feedSubscriptions">Token-trade subscriptions: — / — · Helius API key: — · RugCheck: —</div>
     <div class="muted" style="margin-top:6px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
   </section>
 
@@ -371,7 +371,7 @@ async function refreshAll(){
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
     const subscriptions=status.tradeSubscriptions||{};
-    $('feedSubscriptions').textContent='Token-trade subscriptions: '+number(subscriptions.subscribedMints||0)+' / '+number(subscriptions.maxSubscriptions||0)+' · Helius holder scan: '+(status.heliusRisk||'unknown')+' · PumpPortal trade key: '+(status.tradeFeed==='connected'?'socket connected; subscription count shown above':'not confirmed connected');
+    $('feedSubscriptions').textContent='Token-trade subscriptions: '+number(subscriptions.subscribedMints||0)+' / '+number(subscriptions.maxSubscriptions||0)+' · Helius API key: '+(status.heliusRisk||'unknown')+' · RugCheck: '+(status.rugCheckRisk||'unknown')+' · PumpPortal socket: '+(status.tradeFeed||'unknown');
     const fd=status.feedDiagnostics||{};
     $('feedMessages').textContent=number(fd.messagesReceived);
     $('feedValidTrades').textContent=number(fd.validTradeMessages);
