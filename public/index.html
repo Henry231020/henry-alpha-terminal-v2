@@ -138,7 +138,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const state={tokens:[],events:[],pressureByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
+const state={tokens:[],events:[],pressureByMint:{},riskByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
 const money=n=>{
   if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
   n=Number(n);
@@ -153,6 +153,18 @@ const shortMint=m=>m&&m.length>16?m.slice(0,7)+'…'+m.slice(-6):(m||'—');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateText=d=>{if(!d)return '—';const t=Date.parse(d);return Number.isFinite(t)?new Date(t).toLocaleString():'—';};
 const ageText=d=>{const t=Date.parse(d||'');if(!Number.isFinite(t))return '—';const m=Math.max(0,Math.floor((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.floor(m/60)+'h':Math.floor(m/1440)+'d';};
+function riskMarkup(result){
+  const h=result?.risk||{}, r=result?.rugcheck||{};
+  const holderObserved=h.status==='observed'&&Number.isFinite(Number(h.top10ConcentrationPct));
+  const rugObserved=r.status==='observed';
+  const walletRisk=rugObserved?r.walletRisk:'unknown';
+  return '<h4 style="margin:12px 0 6px">TOKEN SECURITY & HOLDER RISK</h4>'+
+    '<div>Helius top-10 owner concentration: <strong>'+(holderObserved?escapeHtml(Number(h.top10ConcentrationPct).toFixed(2)+'%'):'UNVERIFIED')+'</strong> · Holders: '+escapeHtml(holderObserved?number(h.holderCount):'Unknown')+'</div>'+
+    '<div>RugCheck classification: <strong>'+escapeHtml(walletRisk.toUpperCase())+'</strong> · Score: '+escapeHtml(r.scoreNormalised==null?'Unknown':r.scoreNormalised+'/100')+' · Detected insider wallets: '+escapeHtml(r.graphInsidersDetected==null?'Unknown':number(r.graphInsidersDetected))+'</div>'+
+    '<div class="muted">'+escapeHtml(r.reason||'RugCheck report unavailable; wallet-risk gate remains closed.')+'</div>'+
+    (r.dangerRisks&&r.dangerRisks.length?'<div class="red">Danger findings: '+r.dangerRisks.map(x=>escapeHtml(x.name)).join(', ')+'</div>':'')+
+    '<div class="muted">Third-party risk reports are snapshots, not guarantees. Missing data never passes the BUY risk gate.</div>';
+}
 function setConnection(text,ok){
   $('connection').textContent=text;
   $('statusDot').style.background=ok?'#32d583':'#f5c76a';
@@ -271,20 +283,12 @@ async function selectToken(mint){
     } catch (_) {}
     try {
       const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
-      const risk = riskResult.risk || {};
+      state.riskByMint[mint]=riskResult;
       const panel = $('pressurePanel');
-      if(panel) {
-        const observed = risk.status === 'observed' && Number.isFinite(Number(risk.top10ConcentrationPct));
-        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4>' +
-          '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
-          '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
-          '<div>Unique holders observed: '+ escapeHtml(observed ? number(risk.holderCount) : 'Unknown') + '</div>' +
-          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — concentration alone cannot verify safety.</div>' +
-          '<div class="muted">'+escapeHtml(risk.reason || 'No complete holder scan result available.')+'</div>';
-      }
+      if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
       const panel = $('pressurePanel');
-      if(panel) panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4><div><strong>UNVERIFIED — do not treat as safe</strong></div><div>Wallet/scam risk: UNKNOWN. Risk service unavailable.</div>';
+      if(panel) panel.innerHTML += riskMarkup(null);
     }
 
   }catch(e){
@@ -339,6 +343,7 @@ async function refreshAll(){
             'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers: '+escapeHtml(number(wi.earlyBuyers||0))+' · Repeat early buyers: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>'+burstText+'<br>'+
             '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span><br>'+
             '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
+          if(state.riskByMint[current.mint]) panel.innerHTML += riskMarkup(state.riskByMint[current.mint]);
         }).catch(()=>{});
       }
     }
