@@ -12,6 +12,7 @@ const { createRugCheckRiskClient } = require('./lib/rugcheck-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
+const { parseGeckoTrades } = require('./lib/gecko-trades');
 const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
 const { AlertStore } = require('./lib/alert-store');
@@ -37,7 +38,11 @@ let solUsdCheckedAt = 0;
 let solUsdRequest = null;
 let solUsdRetryAfter = 0;
 const SOL_USD_FAILURE_COOLDOWN_MS = 15000;
-let tradeFeedStatus = 'waiting for API key';
+let tradeFeedStatus = 'GeckoTerminal public polling active; PumpPortal paid trade stream not used';
+const geckoDiagnostics = { status: 'starting', calls: 0, tradesSeen: 0, tradesRecorded: 0, duplicateOrStale: 0, errors: 0, lastCallAt: null, lastTradeAt: null, lastError: null };
+const geckoSeenTrades = new Set();
+let geckoCursor = 0;
+let geckoPollInProgress = false;
 const alertThrottle = new AlertThrottle({ cooldownMs: 30000, retentionMs: 10 * 60 * 1000, maxEntries: 5000 });
 const riskRequestGuard = new RiskRequestGuard({ cooldownMs: 30000, maxConcurrent: 3 });
 
@@ -273,24 +278,28 @@ function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   return true;
 }
 
-function recordTradeAtPrice(item, quote) {
-  const { mint, side, solAmount, wallet, timestamp } = item;
-  const valuation = valueTradeInUsd(item, quote);
-  if (!valuation) { feedDiagnostics.recordStalePriceValuation(); return; }
+function recordObservedUsdTrade(mint, item) {
+  const { side, timestamp, wallet } = item;
+  const usdValue = Number(item.usdValue);
+  if (!Number.isFinite(usdValue) || usdValue <= 0) return false;
   const tokenFirstSeenAt = tokens.get(mint)?.firstSeenAt || null;
-  const trade = { side, timestamp, ...valuation, wallet, tokenFirstSeenAt };
+  const trade = { side, timestamp, usdValue, usdValueApproximate: false, solUsdQuoteAgeMs: null, wallet: wallet || null, tokenFirstSeenAt };
   const accepted = pressureStore.recordTrade(mint, trade);
-  if (!accepted) {
-    feedDiagnostics.recordStoreRejected();
-    return;
-  }
+  if (!accepted) { feedDiagnostics.recordStoreRejected(); return false; }
   feedDiagnostics.recordTradeRecorded(new Date(timestamp).toISOString());
   walletIntelligence.recordTrade(mint, trade, tokenFirstSeenAt);
   persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
   const analysis = pressureStore.analyse(mint);
   const alertSignal = pressureAlertSignal(analysis);
   if (alertSignal) recordPressureAlert(mint, alertSignal, analysis, timestamp);
-  broadcast({ type: 'trade-observation', mint, side, usdValue: trade.usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: trade.solUsdQuoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
+  broadcast({ type: 'trade-observation', mint, side, usdValue: trade.usdValue, usdValueApproximate: false, solUsdQuoteAgeMs: null, receivedAt: new Date(timestamp).toISOString(), analysis });
+  return true;
+}
+
+function recordTradeAtPrice(item, quote) {
+  const valuation = valueTradeInUsd(item, quote);
+  if (!valuation) { feedDiagnostics.recordStalePriceValuation(); return; }
+  recordObservedUsdTrade(item.mint, { ...item, ...valuation });
 }
 
 function processTradeMessage(data) {
@@ -442,76 +451,37 @@ async function refreshMarketData() {
 function connectPumpPortal() {
   clearTimeout(reconnectTimer);
   pumpStatus = 'connecting';
-
-  broadcast({
-    type: 'status',
-    provider: 'PumpPortal',
-    status: pumpStatus,
-    time: new Date().toISOString()
-  });
-
-  console.log('Connecting to PumpPortal...');
-
-  const socketUrl = process.env.PUMPPORTAL_API_KEY ? PUMP_URL + '?api-key=' + encodeURIComponent(process.env.PUMPPORTAL_API_KEY) : PUMP_URL;
-  const socket = new WebSocket(socketUrl);
+  broadcast({ type: 'status', provider: 'PumpPortal discovery', status: pumpStatus, time: new Date().toISOString() });
+  // Free discovery only. Do not subscribe to PumpPortal's paid token-trade stream.
+  const socket = new WebSocket(PUMP_URL);
   pumpSocket = socket;
-
   socket.on('open', () => {
     if (pumpSocket !== socket) return;
-
     pumpStatus = 'connected';
     reconnectDelay = 2000;
-
     socket.send(JSON.stringify({ method: 'subscribeNewToken' }));
     socket.send(JSON.stringify({ method: 'subscribeMigration' }));
-    tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
-    if (process.env.PUMPPORTAL_API_KEY) {
-      // subscribeLatest evicts the oldest inserted item at capacity; feed older
-      // discoveries first so the final 100 subscriptions are the newest tokens.
-      for (const mint of newestTokenMints([...tokens.values()], 100).reverse()) tradeSubscriptions.subscribeLatest(mint);
-    }
-
-    console.log('PumpPortal connected; subscribed to launches and migrations');
-
-    broadcast({
-      type: 'status',
-      provider: 'PumpPortal',
-      status: pumpStatus,
-      time: new Date().toISOString()
-    });
+    tradeSubscriptions = null;
+    tradeFeedStatus = 'GeckoTerminal public trade polling active; PumpPortal discovery only';
+    console.log('PumpPortal free discovery connected; paid trade subscriptions disabled');
+    broadcast({ type: 'status', provider: 'PumpPortal discovery', status: pumpStatus, time: new Date().toISOString() });
   });
-
   socket.on('message', raw => {
     feedDiagnostics.recordMessage();
     try {
       const parsed = JSON.parse(raw.toString());
-      if (processTradeMessage(parsed)) return;
+      // Never parse PumpPortal trade events: the paid trade subscription is not used.
       addEvent(parsed);
     } catch (_) {
       feedDiagnostics.recordMalformedJson();
-      console.error('Ignored invalid PumpPortal message');
+      console.error('Ignored invalid PumpPortal discovery message');
     }
   });
-
-  socket.on('error', error => {
-    console.error('PumpPortal connection error:', error.message);
-  });
-
+  socket.on('error', error => console.error('PumpPortal discovery error:', error.message));
   socket.on('close', () => {
     if (pumpSocket !== socket) return;
-
     pumpStatus = 'disconnected';
-    tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'disconnected' : 'disabled: API key required';
-    tradeSubscriptions = null;
-
-    broadcast({
-      type: 'status',
-      provider: 'PumpPortal',
-      status: pumpStatus,
-      time: new Date().toISOString()
-    });
-
+    tradeFeedStatus = 'GeckoTerminal public polling active; PumpPortal discovery disconnected';
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);
       connectPumpPortal();
@@ -519,6 +489,61 @@ function connectPumpPortal() {
   });
 }
 
+async function pollGeckoTerminalTrades() {
+  if (geckoPollInProgress) return;
+  geckoPollInProgress = true;
+  geckoDiagnostics.status = 'polling public API';
+  try {
+    const candidates = [...tokens.values()]
+      .filter(token => token && token.mint && token.pairAddress)
+      .sort((a, b) => (selectedTokenOrder.get(b.mint) || Date.parse(b.firstSeenAt || '') || 0) - (selectedTokenOrder.get(a.mint) || Date.parse(a.firstSeenAt || '') || 0));
+    if (!candidates.length) {
+      geckoDiagnostics.status = 'waiting for tokens with a verified DEX pool';
+      return;
+    }
+    const count = Math.min(8, candidates.length);
+    const start = geckoCursor % candidates.length;
+    const batch = Array.from({ length: count }, (_, i) => candidates[(start + i) % candidates.length]);
+    geckoCursor = (start + count) % candidates.length;
+    for (let i = 0; i < batch.length; i++) {
+      const token = batch[i];
+      const url = 'https://api.geckoterminal.com/api/v2/networks/solana/pools/' +
+        encodeURIComponent(token.pairAddress) + '/trades';
+      try {
+        const response = await fetch(url, {
+          headers: { Accept: 'application/json;version=20230203' },
+          signal: AbortSignal.timeout(10000)
+        });
+        geckoDiagnostics.calls++;
+        geckoDiagnostics.lastCallAt = new Date().toISOString();
+        if (!response.ok) throw new Error('GeckoTerminal HTTP ' + response.status);
+        const body = await response.json();
+        const trades = parseGeckoTrades(body, token.mint, token.priceOrientation);
+        for (const item of trades) {
+          const key = item.txHash + ':' + item.timestamp + ':' + item.side;
+          if (geckoSeenTrades.has(key)) { geckoDiagnostics.duplicateOrStale++; continue; }
+          geckoSeenTrades.add(key);
+          if (geckoSeenTrades.size > 10000) geckoSeenTrades.delete(geckoSeenTrades.values().next().value);
+          const recorded = recordObservedUsdTrade(token.mint, item);
+          if (recorded) {
+            geckoDiagnostics.tradesRecorded++;
+            geckoDiagnostics.lastTradeAt = new Date(item.timestamp).toISOString();
+          }
+          geckoDiagnostics.tradesSeen++;
+        }
+        geckoDiagnostics.lastError = null;
+      } catch (error) {
+        geckoDiagnostics.errors++;
+        geckoDiagnostics.lastError = String(error.message || error).slice(0, 180);
+      }
+      // Public GeckoTerminal limit is approximately 10 calls/minute; stay below it.
+      if (i < batch.length - 1) await new Promise(resolve => setTimeout(resolve, 6500));
+    }
+    geckoDiagnostics.status = 'active; public API polling';
+  } finally {
+    geckoPollInProgress = false;
+  }
+}
 const server = http.createServer(async (req, res) => {
   // The dashboard and API are same-origin; do not grant arbitrary websites
   // cross-origin access to live market and account-adjacent diagnostics.
@@ -562,6 +587,7 @@ const server = http.createServer(async (req, res) => {
       pressureObservations: pressureStore.getStats(),
       tradeFeed: tradeFeedStatus,
       feedDiagnostics: feedDiagnostics.snapshot(),
+      geckoTradeFeed: { ...geckoDiagnostics, seenTransactionKeys: geckoSeenTrades.size, publicFreeTier: true, documentedApproximateLimitPerMinute: 10 },
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
       rugCheckRisk: 'public token report queried on token selection; optional RUGCHECK_API_KEY supported',
       persistence: persistence.status(),
@@ -571,7 +597,7 @@ const server = http.createServer(async (req, res) => {
       solUsdQuoteAt: solUsdCheckedAt ? new Date(solUsdCheckedAt).toISOString() : null,
       solUsdQuoteAgeMs: solUsdCheckedAt ? Math.max(0, Date.now() - solUsdCheckedAt) : null,
       solUsdRetryAfter: solUsdRetryAfter > Date.now() ? new Date(solUsdRetryAfter).toISOString() : null,
-      pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
+      pressureEngine: 'GeckoTerminal public trade polling; market signals remain risk-gated and data freshness is provider-limited',
       automaticTrading: false,
       persistenceMode: persistence.status().mode
     });
@@ -841,6 +867,8 @@ server.listen(PORT, HOST, () => {
     liveFeedsStarted = true;
     connectPumpPortal();
     setInterval(refreshMarketData, DEX_REFRESH_MS);
+    setTimeout(pollGeckoTerminalTrades, 5000);
+    setInterval(pollGeckoTerminalTrades, 60000);
   }
 
   persistence.initialize().then(async result => {
