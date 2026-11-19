@@ -863,7 +863,21 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
-wss.on('connection', socket => {
+wss.on('connection', (socket, req) => {
+  // Browsers include Origin on WebSocket handshakes. Reject cross-site pages
+  // attempting to subscribe to this live feed; non-browser clients may omit it.
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.headers.host) {
+        socket.close(1008, 'Origin not allowed');
+        return;
+      }
+    } catch (_) {
+      socket.close(1008, 'Invalid origin');
+      return;
+    }
+  }
   clients.add(socket);
 
   socket.send(JSON.stringify({
