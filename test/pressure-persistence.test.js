@@ -93,3 +93,19 @@ test('queries global recent alerts with a bounded parameterized query', async ()
   assert.match(query.sql, /ORDER BY observed_at DESC LIMIT \$1/);
   assert.equal(query.args[0], 100);
 });
+
+test('discovers currently open paper positions independently of recent mint activity', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.includes("DISTINCT ON (mint)")) return { rows: [{ mint: 'inactive-open-mint' }, { mint: '' }] };
+    return { rows: [] };
+  } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  assert.deepEqual(await store.openPaperMints(99999), ['inactive-open-mint']);
+  const query = calls.find(item => item.sql.includes("DISTINCT ON (mint)"));
+  assert.match(query.sql, /ORDER BY mint, observed_at DESC, id DESC/);
+  assert.match(query.sql, /payload->>'status' = 'paper entry opened'/);
+  assert.equal(query.args[0], 1000);
+});
