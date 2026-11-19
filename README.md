@@ -55,3 +55,5 @@ Wallet-intelligence memory is bounded across the whole session: token-wallet pai
 
 Trade USD valuation uses a timestamped SOL/USD quote. Quotes more than 60 seconds before or after the observed trade are rejected rather than allowed to distort buy/sell pressure; quote age and whether the USD estimate is approximate are retained with accepted trade observations. Pending trades expire outside this same freshness window.
 SOL/USD quote requests also use a failure cooldown (15 seconds by default, or a bounded numeric `Retry-After` when supplied) to avoid hammering the quote provider during outages; the current quote age and next retry time are exposed in `/api/status`.
+
+Token metadata retrieval accepts HTTPS URLs only, rejects credentials, non-standard ports, localhost/internal names and literal private/reserved IP destinations, and refuses redirects. This reduces exposure to malicious token-supplied metadata URLs; arbitrary DNS hostnames are still subject to the host's network-resolution policy.
