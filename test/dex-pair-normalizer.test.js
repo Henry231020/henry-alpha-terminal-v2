@@ -63,6 +63,8 @@ test('inverts the quote-token USD price when the requested mint is the quote sid
   assert.equal(market.marketCapUsd, null);
   assert.equal(market.priceChange24h, -50);
   assert.equal(market.priceOrientation, 'quote-token-inverted');
+  assert.equal(market.buys24h, 5);
+  assert.equal(market.sells24h, 10);
   assert.equal(market.baseSymbol, 'TGT');
 });
 
