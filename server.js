@@ -21,6 +21,7 @@ const { RiskRequestGuard } = require('./lib/risk-request-guard');
 const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuation');
 const { isSafeMetadataUrl } = require('./lib/safe-metadata-url');
 const { boundedInteger } = require('./lib/query-limits');
+const { pressureAlertSignal } = require('./lib/pressure-alert');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -283,9 +284,9 @@ function recordTradeAtPrice(item, quote) {
   walletIntelligence.recordTrade(mint, trade, tokenFirstSeenAt);
   persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
   const analysis = pressureStore.analyse(mint);
-  const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
-  if (isAlertSignal) recordPressureAlert(mint, analysis.signal, analysis, timestamp);
-  broadcast({ type: 'trade-observation', mint, side, usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: trade.solUsdQuoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
+  const alertSignal = pressureAlertSignal(analysis);
+  if (alertSignal) recordPressureAlert(mint, alertSignal, analysis, timestamp);
+  broadcast({ type: 'trade-observation', mint, side, usdValue: trade.usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: trade.solUsdQuoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
 function processTradeMessage(data) {
