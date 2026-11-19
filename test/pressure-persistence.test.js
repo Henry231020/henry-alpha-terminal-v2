@@ -25,8 +25,9 @@ test('writes and reads use parameterized SQL and bounded limits', async () => {
   assert.equal(await store.save('mint', 'trade', Date.now(), { side: 'buy' }), true);
   const rows = await store.recent('mint', 99999);
   assert.equal(rows.length, 1);
-  assert.equal(calls[3].args[1], 1000);
-  assert.match(calls[2].sql, /\$1/);
+  const select = calls.find(item => item.sql.startsWith('SELECT kind, observed_at, payload FROM pressure_observations WHERE mint'));
+  assert.equal(select.args[1], 1000);
+  assert.match(select.sql, /WHERE mint = \$1/);
 });
 
 test('persists alert observations as a supported kind', async () => {
