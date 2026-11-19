@@ -56,4 +56,10 @@ test('does not classify PumpPortal create events with traderPublicKey as rejecte
   });
   assert.equal(result.ok, false);
   assert.equal(result.candidate, false);
+  const createWithAmounts = parseTradeMessage({
+    txType: 'create', mint: 'MintAddress', traderPublicKey: 'CreatorWallet',
+    solAmount: 1, initialBuy: 1000
+  });
+  assert.equal(createWithAmounts.ok, false);
+  assert.equal(createWithAmounts.candidate, false);
 });
