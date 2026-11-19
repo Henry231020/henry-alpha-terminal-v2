@@ -75,14 +75,14 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
   <section class="panel" style="margin-bottom:18px;padding:14px 16px">
     <div class="panel-head" style="padding:0 0 10px;border:0"><h2>LIVE TRADE FEED DIAGNOSTICS</h2><span class="pill" id="tradeFeedState">Waiting for status</span></div>
     <div class="detail-grid" style="margin:0">
-      <div class="detail-stat"><div class="label">MESSAGES RECEIVED</div><div class="value" id="feedMessages">—</div></div>
-      <div class="detail-stat"><div class="label">VALID TRADE MESSAGES</div><div class="value" id="feedValidTrades">—</div></div>
+      <div class="detail-stat"><div class="label">GECKO API CALLS</div><div class="value" id="feedMessages">—</div></div>
+      <div class="detail-stat"><div class="label">RECENT POOL TRADES SEEN</div><div class="value" id="feedValidTrades">—</div></div>
       <div class="detail-stat"><div class="label">TRADES RECORDED</div><div class="value" id="feedRecordedTrades">—</div></div>
-      <div class="detail-stat"><div class="label">PRICE UNAVAILABLE</div><div class="value" id="feedPriceUnavailable">—</div></div>
-      <div class="detail-stat"><div class="label">STALE USD QUOTES REJECTED</div><div class="value" id="feedStaleValuations">—</div></div>
-      <div class="detail-stat"><div class="label">STORE REJECTIONS</div><div class="value" id="feedStoreRejected">—</div></div>
-      <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
-      <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
+      <div class="detail-stat"><div class="label">DUPLICATE / STALE TRADES</div><div class="value" id="feedPriceUnavailable">—</div></div>
+      <div class="detail-stat"><div class="label">GECKO API ERRORS</div><div class="value" id="feedStaleValuations">—</div></div>
+      <div class="detail-stat"><div class="label">RECORDED TRADES</div><div class="value" id="feedStoreRejected">—</div></div>
+      <div class="detail-stat"><div class="label">SEEN TRANSACTION KEYS</div><div class="value" id="feedRejectedTrades">—</div></div>
+      <div class="detail-stat"><div class="label">LAST POLL STATUS</div><div class="value" id="feedMalformed">—</div></div>
     </div>
     <div class="muted" style="margin-top:10px" id="feedSubscriptions">Token-trade subscriptions: — / — · Helius API key: — · RugCheck: —</div>
     <div class="muted" style="margin-top:6px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
@@ -370,17 +370,17 @@ async function refreshAll(){
     state.pressureByMint=Object.fromEntries((pressure.pressure||[]).map(item=>[item.mint,item.analysis?.tradeDecision||{action:'WAIT'}]));
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
-    const subscriptions=status.tradeSubscriptions||{};
-    $('feedSubscriptions').textContent='Token-trade subscriptions: '+number(subscriptions.subscribedMints||0)+' / '+number(subscriptions.maxSubscriptions||0)+' · Helius API key: '+(status.heliusRisk||'unknown')+' · RugCheck: '+(status.rugCheckRisk||'unknown')+' · PumpPortal socket: '+(status.tradeFeed||'unknown');
-    const fd=status.feedDiagnostics||{};
-    $('feedMessages').textContent=number(fd.messagesReceived);
-    $('feedValidTrades').textContent=number(fd.validTradeMessages);
-    $('feedRecordedTrades').textContent=number(fd.recordedTrades);
-    $('feedPriceUnavailable').textContent=number(fd.priceUnavailable);
-    $('feedStaleValuations').textContent=number(fd.stalePriceValuations);
-    $('feedStoreRejected').textContent=number(fd.storeRejectedTrades);
-    $('feedRejectedTrades').textContent=number(fd.rejectedTradeCandidates);
-    $('feedMalformed').textContent=number(fd.malformedJsonMessages);
+    const gecko=status.geckoTradeFeed||{};
+    $('feedSubscriptions').textContent='Free GeckoTerminal public API · approx. 10 calls/min limit; app polls at max 8/min · PumpPortal discovery only · Helius: '+(status.heliusRisk||'unknown')+' · RugCheck: '+(status.rugCheckRisk||'unknown');
+    $('feedMessages').textContent=number(gecko.calls);
+    $('feedValidTrades').textContent=number(gecko.tradesSeen);
+    $('feedRecordedTrades').textContent=number(gecko.tradesRecorded);
+    $('feedPriceUnavailable').textContent=number(gecko.duplicateOrStale);
+    $('feedStaleValuations').textContent=number(gecko.errors);
+    $('feedStoreRejected').textContent=number(status.feedDiagnostics?.storeRejectedTrades||0);
+    $('feedRejectedTrades').textContent=number(gecko.seenTransactionKeys);
+    $('feedMalformed').textContent=gecko.status||'—';
+    $('feedLastSeen').textContent='Last pool trade: '+(gecko.lastTradeAt||'not yet observed')+' · Last API call: '+(gecko.lastCallAt||'not yet called')+' · '+(gecko.lastError||'No provider error reported.');
     $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+' · Last recorded: '+(fd.lastRecordedTradeAt?dateText(fd.lastRecordedTradeAt):'none yet')+(fd.lastProcessingIssue?' · Processing issue: '+fd.lastProcessingIssue:'')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+' · SOL/USD quote age: '+(status.solUsdQuoteAgeMs==null?'unavailable':Math.round(status.solUsdQuoteAgeMs/1000)+'s')+(status.solUsdRetryAfter?' · Quote retry after: '+dateText(status.solUsdRetryAfter):'')+'. Counts reset when server restarts; live format not independently verified.';
     $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
     $('learnClosed').textContent=number(learning.closedTrades||0);
