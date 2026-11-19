@@ -97,6 +97,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
       </div>
       <div class="muted" id="learnNote" style="margin-top:12px">Waiting for paper-trade outcomes. The system does not change strategy rules automatically.</div>
       <div id="learnFactors" style="margin-top:10px"></div>
+      <div id="learnExits" style="margin-top:10px"></div>
       <div id="learnRecent" style="margin-top:10px"></div>
     </div>
   </section>
@@ -327,7 +328,10 @@ async function refreshAll(){
     $('learnFactors').innerHTML='<h4 style="margin:10px 0 6px">WHAT ENTRY CONDITIONS HAVE WORKED?</h4>'+
       (factorRows.length?factorRows.map(([name,v])=>'<div class="event">'+escapeHtml(name)+' · '+escapeHtml(number(v.trades))+' trades · '+escapeHtml((v.wins/v.trades*100).toFixed(0))+'% wins · Avg '+escapeHtml((v.averagePnlPct>0?'+':'')+v.averagePnlPct+'%')+'</div>').join(''):'<div class="muted">Not enough repeated outcomes yet. Each factor needs at least two closed paper trades before it is shown.</div>')+
       '<div class="muted">Descriptive comparisons only; small samples and changing market conditions can mislead. No automatic strategy changes.</div>';
-    $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
+const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[1].trades);
+    $('learnExits').innerHTML='<h4 style="margin:10px 0 6px">HOW EXIT SIGNALS PERFORMED</h4>'+
+      (exitRows.length?exitRows.map(([name,v])=>'<div class="event">'+escapeHtml(name)+' · '+escapeHtml(number(v.trades))+' exits · '+escapeHtml(number(v.wins))+' wins / '+escapeHtml(number(v.losses))+' losses · Avg '+escapeHtml((v.averagePnlPct>0?'+':'')+v.averagePnlPct+'%')+'</div>').join(''):'<div class="muted">Exit-outcome statistics will appear after paper positions close.</div>');
+        $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
     renderTokens();renderEvents();
     if(state.selectedMint){
       const current=state.tokens.find(t=>t.mint===state.selectedMint);
