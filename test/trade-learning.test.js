@@ -97,3 +97,29 @@ test('reports multi-factor entry condition and exit outcome statistics',()=>{
  assert.equal(summary.factorStats['buy imbalance: 50-69%'].wins,1);
  assert.equal(summary.exitStats['SELL / EXIT WARNING'].trades,2);
 });
+
+
+test('bounds tracked decision timestamps and open paper positions',()=>{
+  let now=900000;
+  const engine=new TradeLearningEngine({clock:()=>now,maxTrackedMints:2,maxOpenPositions:1});
+  const wait={tradeDecision:{action:'WAIT',reasons:[]}};
+  for(const mint of ['a','b','c']) {
+    engine.observe({mint,analysis:wait,priceUsd:1,timestamp:now});
+    now++;
+  }
+  assert.equal(engine.lastDecisionAt.size,2);
+  const first=engine.observe({mint:'paper-a',analysis:buyAnalysis(),priceUsd:1,timestamp:now});
+  assert.equal(first.trade.status,'paper entry opened');
+  now++;
+  const second=engine.observe({mint:'paper-b',analysis:buyAnalysis(),priceUsd:1,timestamp:now});
+  assert.equal(second.trade,null);
+  assert.match(second.status,/capacity reached/);
+  assert.equal(engine.summary().openPaperPositions,1);
+});
+test('refuses to restore more open paper positions than the configured cap',()=>{
+  const engine=new TradeLearningEngine({maxOpenPositions:1});
+  const trade=mint=>({mint,entryAt:1000,entryPrice:1,status:'open paper trade'});
+  assert.equal(engine.restoreTrade(trade('open-a')),true);
+  assert.equal(engine.restoreTrade(trade('open-b')),false);
+  assert.equal(engine.summary().openPaperPositions,1);
+});
