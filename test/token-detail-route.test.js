@@ -26,3 +26,7 @@ test('selected-token route fails closed for unknown tokens', () => {
   const route = serverSource.slice(routeStart, routeEnd);
   assert.match(route, /if \(!token\) return sendJson\(res, 404/);
 });
+
+test('does not register a second unreachable token detail route', () => {
+  assert.equal((serverSource.match(/url\.pathname\.match\(\^\\\\\/api\\\\\/token/g) || []).length, 0);
+});
