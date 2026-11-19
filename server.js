@@ -11,10 +11,12 @@ const { createHeliusRiskClient } = require('./lib/helius-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
+const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const heliusRisk = createHeliusRiskClient();
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 120000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
+const walletIntelligence = new WalletIntelligence();
 let tradeSubscriptions = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
@@ -241,6 +243,7 @@ function recordTradeAtPrice(item, price) {
     return;
   }
   feedDiagnostics.recordTradeRecorded(new Date(timestamp).toISOString());
+  walletIntelligence.recordTrade(mint, trade, tokens.get(mint)?.firstSeenAt);
   persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
   const analysis = pressureStore.analyse(mint);
   if (alertedPressure.size > 5000) {
@@ -558,9 +561,16 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { mint, count: alerts.length, alerts, persistence: persistence.status(), automaticTrading: false });
   }
 
+  if (url.pathname === '/api/wallet-intelligence') {
+    const mint = url.searchParams.get('mint');
+    if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
+    const token = tokens.get(mint);
+    return sendJson(res, 200, { mint, intelligence: walletIntelligence.analyse(mint, token?.firstSeenAt), automaticTrading: false });
+  }
+
   if (url.pathname === '/api/pressure') {
     const mint = url.searchParams.get('mint');
-    if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), store: pressureStore.getStats() });
+    if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), walletIntelligence: walletIntelligence.analyse(mint, tokens.get(mint)?.firstSeenAt), store: pressureStore.getStats() });
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 100)));
     const pressure = [...tokens.values()].slice(0, limit).map(token => ({
       mint: token.mint,
