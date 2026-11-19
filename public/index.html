@@ -316,7 +316,7 @@ async function refreshAll(){
     $('learnAvgPnl').textContent=learning.averagePnlPct==null?'—':(learning.averagePnlPct>0?'+':'')+learning.averagePnlPct+'%';
     $('learnAvgPnl').className='value '+(learning.averagePnlPct>0?'green':learning.averagePnlPct<0?'red':'');
     $('learnOpen').textContent=number(learning.openPaperPositions||0);
-    $('learnNote').textContent=(learning.learningNote||'Learning summary unavailable')+' Historical paper outcomes are descriptive, not proof of causation.';
+    $('learnNote').textContent=(learning.learningNote||'Learning summary unavailable')+' Historical paper outcomes are descriptive, not proof of causation. Storage: '+(learning.persistence&&learning.persistence.ready?'PostgreSQL — survives server restarts':'memory only — configure DATABASE_URL to retain learning after a server restart.');
     $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
     renderTokens();renderEvents();
     if(state.selectedMint){
