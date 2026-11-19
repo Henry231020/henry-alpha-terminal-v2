@@ -18,6 +18,7 @@ const { AlertStore } = require('./lib/alert-store');
 const { AlertThrottle } = require('./lib/alert-throttle');
 const { newestTokenMints } = require('./lib/token-priority');
 const { RiskRequestGuard } = require('./lib/risk-request-guard');
+const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuation');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -241,7 +242,6 @@ function subscribeMintTrades(mint) {
 
 const pendingTrades = [];
 const MAX_PENDING_TRADES = 500;
-const MAX_TRADE_QUOTE_AGE_MS = 60000;
 
 function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   // Cool down each mint/signal pair independently: a BUY alert must not suppress
@@ -257,17 +257,10 @@ function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
 
 function recordTradeAtPrice(item, quote) {
   const { mint, side, solAmount, wallet, timestamp } = item;
-  const price = Number(quote && quote.price);
-  const quoteCheckedAt = Number(quote && quote.checkedAt);
-  const quoteAgeMs = quoteCheckedAt - timestamp;
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(quoteCheckedAt) || Math.abs(quoteAgeMs) > MAX_TRADE_QUOTE_AGE_MS) {
-    feedDiagnostics.recordStalePriceValuation();
-    return;
-  }
-  const usdValue = solAmount * price;
-  if (!Number.isFinite(usdValue) || usdValue <= 0) { feedDiagnostics.recordStalePriceValuation(); return; }
+  const valuation = valueTradeInUsd(item, quote);
+  if (!valuation) { feedDiagnostics.recordStalePriceValuation(); return; }
   const tokenFirstSeenAt = tokens.get(mint)?.firstSeenAt || null;
-  const trade = { side, timestamp, usdValue, solUsdPrice: price, solUsdQuoteAt: new Date(quoteCheckedAt).toISOString(), solUsdQuoteAgeMs: quoteAgeMs, usdValueApproximate: Math.abs(quoteAgeMs) > 30000, wallet, tokenFirstSeenAt };
+  const trade = { side, timestamp, ...valuation, wallet, tokenFirstSeenAt };
   const accepted = pressureStore.recordTrade(mint, trade);
   if (!accepted) {
     feedDiagnostics.recordStoreRejected();
@@ -279,7 +272,7 @@ function recordTradeAtPrice(item, quote) {
   const analysis = pressureStore.analyse(mint);
   const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
   if (isAlertSignal) recordPressureAlert(mint, analysis.signal, analysis, timestamp);
-  broadcast({ type: 'trade-observation', mint, side, usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: quoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
+  broadcast({ type: 'trade-observation', mint, side, usdValue, usdValueApproximate: trade.usdValueApproximate, solUsdQuoteAgeMs: trade.solUsdQuoteAgeMs, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
 function processTradeMessage(data) {
