@@ -79,3 +79,14 @@ test('RSI handles flat prices and rejects invalid periods or values', () => {
   assert.equal(calculateRsi(Array(20).fill(1), 0), null);
   assert.equal(calculateRsi([1, 2, NaN, 4], 2), null);
 });
+
+test('urgent accelerating sell pressure warns to exit before EMA history is ready', () => {
+  const trades = [
+    ...Array.from({ length: 4 }, (_, i) => ({ side: 'buy', usdValue: 100, timestamp: now - 240000 + i * 1000 })),
+    ...Array.from({ length: 10 }, (_, i) => ({ side: 'sell', usdValue: 200, timestamp: now - 50000 + i * 100 }))
+  ];
+  const result = analysePressure({ trades, now, snapshots: [] });
+  assert.equal(result.indicators.ready, false);
+  assert.equal(result.tradeDecision.action, 'SELL / EXIT WARNING');
+  assert.match(result.tradeDecision.reasons.join(' '), /Accelerating sell pressure/);
+});
