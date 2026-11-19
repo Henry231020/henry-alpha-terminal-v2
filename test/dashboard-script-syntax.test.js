@@ -37,3 +37,8 @@ test('live feed diagnostics show trades rejected for stale SOL/USD quotes', () =
   assert.match(html, /id="feedStaleValuations"/);
   assert.match(html, /fd\.stalePriceValuations/);
 });
+
+test('live feed diagnostics display SOL/USD quote freshness and retry timing', () => {
+  assert.match(html, /status\.solUsdQuoteAgeMs/);
+  assert.match(html, /status\.solUsdRetryAfter/);
+});
