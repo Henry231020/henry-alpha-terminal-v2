@@ -42,3 +42,10 @@ test('live feed diagnostics display SOL/USD quote freshness and retry timing', (
   assert.match(html, /status\.solUsdQuoteAgeMs/);
   assert.match(html, /status\.solUsdRetryAfter/);
 });
+
+test('selected-token decision and risk gates refresh immediately after risk verification', () => {
+  assert.match(html, /id="decisionAction"/);
+  assert.match(html, /id="decisionReasons"/);
+  assert.match(html, /if\(decisionAction\) decisionAction\.textContent='TRADE DECISION: '\+\(updatedDecision\.action\|\|'WAIT'\)/);
+  assert.match(html, /if\(riskWallet\) riskWallet\.textContent=updatedAnalysis\.gates/);
+});
