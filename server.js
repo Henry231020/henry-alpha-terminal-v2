@@ -301,13 +301,15 @@ function processTradeMessage(data) {
       pendingTrades.push(item);
       return;
     }
-    const cutoff = Date.now() - 5 * 60 * 1000;
+    const cutoff = Date.now() - MAX_TRADE_QUOTE_AGE_MS;
     while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
     const queued = pendingTrades.splice(0, pendingTrades.length);
     for (const pending of queued) recordTradeAtPrice(pending, quote);
     recordTradeAtPrice(item, quote);
   }).catch(() => {
     feedDiagnostics.recordPriceUnavailable();
+    const cutoff = Date.now() - MAX_TRADE_QUOTE_AGE_MS;
+    while (pendingTrades.length && pendingTrades[0].timestamp < cutoff) pendingTrades.shift();
     if (pendingTrades.length >= MAX_PENDING_TRADES) pendingTrades.shift();
     pendingTrades.push(item);
   });
