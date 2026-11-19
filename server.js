@@ -372,6 +372,7 @@ async function refreshOneToken(mint) {
     };
 
     tokens.set(mint, merged);
+    pressureStore.updateLiquidity(mint, merged.liquidityUsd);
     if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
       const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
       const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
@@ -687,6 +688,7 @@ const server = http.createServer(async (req, res) => {
         };
 
         tokens.set(mint, merged);
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
         if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
           const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
           const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
