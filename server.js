@@ -375,6 +375,14 @@ async function refreshOneToken(mint) {
       persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
     pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+    if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
+      const analysis = pressureStore.analyse(mint);
+      const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: Date.now() });
+      if (learningResult.trade) {
+        persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
+        broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
+      }
+    }
     broadcast({ type: 'market-update', token: merged });
   } catch (error) {
     const message = String(error && error.message || 'Unknown DEX error');
