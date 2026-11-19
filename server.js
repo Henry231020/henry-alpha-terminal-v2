@@ -863,7 +863,13 @@ server.listen(PORT, HOST, () => {
     console.log('Pressure persistence:', result);
     if (result && result.ready && typeof persistence.mints === 'function') {
       try {
-        const mints = await persistence.mints(500);
+        const [recentMints, openPaperMints] = await Promise.all([
+          persistence.mints(500),
+          typeof persistence.openPaperMints === 'function' ? persistence.openPaperMints(1000) : Promise.resolve([])
+        ]);
+        // Include every currently open paper position even when its mint has
+        // been inactive long enough to fall outside the recent-mint window.
+        const mints = [...new Set([...openPaperMints, ...recentMints])];
         let restored = 0;
         for (const mint of mints) {
           const rows = await persistence.recent(mint, 1000);
