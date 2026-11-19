@@ -24,3 +24,11 @@ test('paper learning panel renders entry factors and exit outcomes', () => {
   assert.match(html, /WHAT ENTRY CONDITIONS HAVE WORKED/);
   assert.match(html, /HOW EXIT SIGNALS PERFORMED/);
 });
+
+
+test('wallet coverage is shown as unverified rather than zero when evidence is missing', () => {
+  assert.match(html, /walletCoverageMarkup\(wi\)/);
+  assert.match(html, /hasRows\?number\(wi\.uniqueBuyers\):'UNVERIFIED'/);
+  assert.match(html, /earlyVerified\?number\(wi\.earlyBuyers\):'UNVERIFIED'/);
+  assert.doesNotMatch(html, /number\(wi\.uniqueBuyers\|\|0\)/);
+});
