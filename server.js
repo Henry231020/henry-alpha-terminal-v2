@@ -17,6 +17,7 @@ const { TradeLearningEngine } = require('./lib/trade-learning');
 const { AlertStore } = require('./lib/alert-store');
 const { AlertThrottle } = require('./lib/alert-throttle');
 const { newestTokenMints } = require('./lib/token-priority');
+const { RiskRequestGuard } = require('./lib/risk-request-guard');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -31,6 +32,7 @@ let solUsdCheckedAt = 0;
 let solUsdRequest = null;
 let tradeFeedStatus = 'waiting for API key';
 const alertThrottle = new AlertThrottle({ cooldownMs: 30000, retentionMs: 10 * 60 * 1000, maxEntries: 5000 });
+const riskRequestGuard = new RiskRequestGuard({ cooldownMs: 30000, maxConcurrent: 3 });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -562,32 +564,42 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname.startsWith('/api/risk/')) {
-    const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
-    if (!mint) return sendJson(res, 400, { error: 'mint required' });
-    const [risk, rugcheck] = await Promise.all([
-      heliusRisk.getHolderRisk(mint),
-      rugCheckRisk.getTokenRisk(mint)
-    ]);
-    const current = pressureStore.analyse(mint);
-    const holderConcentrationPct = risk.status === 'observed'
-      ? risk.top10ConcentrationPct
-      : current.metrics?.holderConcentrationPct ?? null;
-    const riskObservedAt = Number(rugcheck.checkedAt);
-    const checkedAt = rugcheck.status === 'observed' && Number.isFinite(riskObservedAt) ? Math.min(Date.now(), riskObservedAt) : Date.now();
-    pressureStore.updateHolderRisk(mint, {
-      holderConcentrationPct,
-      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
-      checkedAt
-    });
-    const savedRisk = {
-      holderConcentrationPct,
-      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
-      checkedAt,
-      helius: risk,
-      rugcheck
-    };
-    persistence.save(mint, 'risk', checkedAt, savedRisk).catch(() => {});
-    return sendJson(res, 200, { mint, risk, rugcheck, checkedAt: new Date(checkedAt).toISOString(), analysis: pressureStore.analyse(mint), automaticTrading: false });
+    let mint;
+    try {
+      mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
+    } catch (_) {
+      return sendJson(res, 400, { error: 'Invalid mint address encoding' });
+    }
+    const permit = riskRequestGuard.begin(mint);
+    if (!permit.ok) return sendJson(res, permit.status, { error: permit.reason, retryAfterMs: permit.retryAfterMs || null, automaticTrading: false });
+    try {
+      const [risk, rugcheck] = await Promise.all([
+        heliusRisk.getHolderRisk(mint),
+        rugCheckRisk.getTokenRisk(mint)
+      ]);
+      const current = pressureStore.analyse(mint);
+      const holderConcentrationPct = risk.status === 'observed'
+        ? risk.top10ConcentrationPct
+        : current.metrics?.holderConcentrationPct ?? null;
+      const riskObservedAt = Number(rugcheck.checkedAt);
+      const checkedAt = rugcheck.status === 'observed' && Number.isFinite(riskObservedAt) ? Math.min(Date.now(), riskObservedAt) : Date.now();
+      pressureStore.updateHolderRisk(mint, {
+        holderConcentrationPct,
+        walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
+        checkedAt
+      });
+      const savedRisk = {
+        holderConcentrationPct,
+        walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
+        checkedAt,
+        helius: risk,
+        rugcheck
+      };
+      persistence.save(mint, 'risk', checkedAt, savedRisk).catch(() => {});
+      return sendJson(res, 200, { mint, risk, rugcheck, checkedAt: new Date(checkedAt).toISOString(), analysis: pressureStore.analyse(mint), automaticTrading: false });
+    } finally {
+      permit.release();
+    }
   }
 
   if (url.pathname === '/api/alerts/recent') {
