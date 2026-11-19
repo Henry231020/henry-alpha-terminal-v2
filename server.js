@@ -594,11 +594,20 @@ const server = http.createServer(async (req, res) => {
     if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 25)));
     const rows = await persistence.recentAlerts(mint, limit);
-    const alerts = rows.map(row => ({
+    const persisted = rows.map(row => ({
       mint,
       observedAt: row.observed_at,
       ...(row.payload || {})
     }));
+    const combined = [...alertStore.recent(limit, mint), ...persisted]
+      .sort((a, b) => Date.parse(b.receivedAt || b.observedAt || 0) - Date.parse(a.receivedAt || a.observedAt || 0));
+    const seen = new Set();
+    const alerts = combined.filter(item => {
+      const key = String(item.signal || '') + ':' + String(item.receivedAt || item.observedAt || '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit);
     return sendJson(res, 200, { mint, count: alerts.length, alerts, persistence: persistence.status(), automaticTrading: false });
   }
 
