@@ -98,3 +98,12 @@ test('restored risk uses its persisted observation time rather than becoming fre
  assert.equal(analysis.gates.walletRisk,'unknown');
  assert.equal(analysis.gates.concentrationOk,false);
 });
+
+test('pressure store bounds retained token state during long-running token churn', () => {
+  const { MAX_TRACKED_MINTS } = require('../lib/pressure-store');
+  const store = new PressureStore();
+  for (let i = 0; i < MAX_TRACKED_MINTS + 1; i++) store.updateLiquidity('mint-' + i, 10000);
+  assert.equal(store.byMint.size, MAX_TRACKED_MINTS);
+  assert.equal(store.byMint.has('mint-0'), false);
+  assert.equal(store.byMint.has('mint-' + MAX_TRACKED_MINTS), true);
+});
