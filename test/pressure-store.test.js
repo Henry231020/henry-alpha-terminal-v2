@@ -78,3 +78,23 @@ test('cached provider quotes cannot inflate price-history observations', () => {
   assert.equal(store.recordSnapshot('mint', { timestamp: now, priceUsd: 1.1 }), true);
   assert.equal(store.getStats().snapshotCount, 2);
 });
+
+test('holder and RugCheck risk gates expire after five minutes',()=>{
+ let now=2000000;const store=new PressureStore({clock:()=>now});
+ store.updateLiquidity('mint',20000);
+ store.updateHolderRisk('mint',{holderConcentrationPct:20,walletRisk:'low'});
+ let analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'low');
+ assert.equal(analysis.gates.concentrationOk,true);
+ now+=5*60*1000+1;
+ analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'unknown');
+ assert.equal(analysis.gates.concentrationOk,false);
+});
+test('restored risk uses its persisted observation time rather than becoming fresh',()=>{
+ let now=3000000;const store=new PressureStore({clock:()=>now});
+ assert.equal(store.restoreObservation('mint','risk',now-6*60*1000,{holderConcentrationPct:10,walletRisk:'low'}),true);
+ const analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'unknown');
+ assert.equal(analysis.gates.concentrationOk,false);
+});
