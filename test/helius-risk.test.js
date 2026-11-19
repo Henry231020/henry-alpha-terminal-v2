@@ -94,3 +94,40 @@ test('null or empty holder balances fail closed instead of counting as zero', as
   assert.equal(result.top10ConcentrationPct, null);
   assert.match(result.reason, /Incomplete owner or balance data/);
 });
+
+
+test('caches complete Helius scans briefly and preserves the original checkedAt',async()=>{
+  let now=1000,calls=0;
+  const mint='So11111111111111111111111111111111111111112';
+  const client=createHeliusRiskClient({
+    apiKey:'test',clock:()=>now,cacheTtlMs:100,maxCacheEntries:2,
+    fetchImpl:async(_url,options)=>{
+      calls++;
+      const page=JSON.parse(options.body).params.page;
+      return {ok:true,json:async()=>({result:{token_accounts:page===1?[{owner:'wallet-a',amount:'90'},{owner:'wallet-b',amount:'10'}]:[]}})};
+    }
+  });
+  const first=await client.getHolderRisk(mint);
+  now=1050;
+  const cached=await client.getHolderRisk(mint);
+  assert.equal(calls,2);
+  assert.equal(first.checkedAt,1000);
+  assert.equal(cached.cached,true);
+  assert.equal(cached.checkedAt,1000);
+  now=1101;
+  const refreshed=await client.getHolderRisk(mint);
+  assert.equal(calls,4);
+  assert.notEqual(refreshed.cached,true);
+});
+test('does not cache incomplete or unavailable Helius holder scans',async()=>{
+  let calls=0;
+  const mint='So11111111111111111111111111111111111111112';
+  const client=createHeliusRiskClient({
+    apiKey:'test',
+    fetchImpl:async()=>{calls++;return {ok:false,status:503};}
+  });
+  await client.getHolderRisk(mint);
+  await client.getHolderRisk(mint);
+  assert.equal(calls,2);
+  assert.equal(client.cacheStats().entries,0);
+});
