@@ -11,19 +11,16 @@ test('dashboard contains all live trade feed diagnostic counters', () => {
   }
 });
 
-test('dashboard reads feed diagnostics from status endpoint without enabling trading', () => {
-  assert.match(html, /api\('\/api\/status'\)/);
-  assert.match(html, /status\.feedDiagnostics/);
-  assert.match(html, /fd\.messagesReceived/);
-  assert.match(html, /fd\.validTradeMessages/);
-  assert.match(html, /fd\.recordedTrades/);
-  assert.match(html, /fd\.priceUnavailable/);
-  assert.match(html, /fd\.storeRejectedTrades/);
-  assert.match(html, /fd\.rejectedTradeCandidates/);
-  assert.match(html, /fd\.malformedJsonMessages/);
-  assert.match(html, /Last recorded/);
-  assert.match(html, /Counts reset when server restarts/);
-  assert.match(html, /live format not independently verified/i);
+test('dashboard reads free GeckoTerminal diagnostics from status endpoint without enabling trading', () => {
+  assert.match(html, /api\('\\/api\\/status'\)/);
+  assert.match(html, /status\.geckoTradeFeed/);
+  assert.match(html, /gecko\.calls/);
+  assert.match(html, /gecko\.tradesSeen/);
+  assert.match(html, /gecko\.tradesRecorded/);
+  assert.match(html, /gecko\.duplicateOrStale/);
+  assert.match(html, /gecko\.errors/);
+  assert.match(html, /Last pool trade/);
+  assert.match(html, /Free GeckoTerminal public API/);
   assert.match(html, /No automatic real-money trading/);
 });
 
