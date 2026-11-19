@@ -235,6 +235,7 @@ async function selectToken(mint){
           '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>' +
           'Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>' +
           '<strong>Entry/exit reasoning:</strong> '+escapeHtml((d.reasons||[]).join(' '))+'<br>' +
+          (a.tradePlan ? '<strong>Illustrative trade plan:</strong> Entry '+escapeHtml(money(a.tradePlan.referenceEntryPrice))+' · Stop '+escapeHtml(money(a.tradePlan.stopLossPrice))+' ('+escapeHtml(a.tradePlan.stopLossPct)+'%) · TP1 '+escapeHtml(money(a.tradePlan.takeProfit1Price))+' (+50%) · TP2 '+escapeHtml(money(a.tradePlan.takeProfit2Price))+' (+100%)<br><span class="muted">'+escapeHtml(a.tradePlan.note)+'</span><br>' : '') +
           '<strong>Risk gates:</strong> liquidity '+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+' · concentration '+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+' · wallet '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>' +
           '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
         const wi = pressure.walletIntelligence || {};
