@@ -238,14 +238,15 @@ const ALERT_COOLDOWN_MS = 30000;
 function recordTradeAtPrice(item, price) {
   const { mint, side, solAmount, wallet, timestamp } = item;
   const usdValue = solAmount * price;
-  const trade = { side, timestamp, usdValue, wallet };
+  const tokenFirstSeenAt = tokens.get(mint)?.firstSeenAt || null;
+  const trade = { side, timestamp, usdValue, wallet, tokenFirstSeenAt };
   const accepted = pressureStore.recordTrade(mint, trade);
   if (!accepted) {
     feedDiagnostics.recordStoreRejected();
     return;
   }
   feedDiagnostics.recordTradeRecorded(new Date(timestamp).toISOString());
-  walletIntelligence.recordTrade(mint, trade, tokens.get(mint)?.firstSeenAt);
+  walletIntelligence.recordTrade(mint, trade, tokenFirstSeenAt);
   persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
   const analysis = pressureStore.analyse(mint);
   if (alertedPressure.size > 5000) {
@@ -779,7 +780,7 @@ server.listen(PORT, HOST, () => {
             if (row.kind === 'paper_trade') { if (tradeLearning.restoreTrade(row.payload)) restored++; }
             else if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) {
               if (row.kind === 'trade' && row.payload && typeof row.payload.wallet === 'string') {
-                walletIntelligence.recordTrade(mint, { ...row.payload, timestamp: Number(row.payload.timestamp ?? new Date(row.observed_at).getTime()) }, tokens.get(mint)?.firstSeenAt);
+                walletIntelligence.recordTrade(mint, { ...row.payload, timestamp: Number(row.payload.timestamp ?? new Date(row.observed_at).getTime()) }, row.payload.tokenFirstSeenAt || tokens.get(mint)?.firstSeenAt);
               }
               restored++;
             }
