@@ -342,7 +342,7 @@ const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[
       if(current){
         renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
         const cachedRisk=state.riskByMint[current.mint], riskAge=cachedRisk?.checkedAt?Date.now()-Date.parse(cachedRisk.checkedAt):Infinity;
-        if(riskAge>4*60*1000&&!state.riskLoadingByMint[current.mint]){
+        if(riskAge>5*60*1000&&!state.riskLoadingByMint[current.mint]){
           state.riskLoadingByMint[current.mint]=true;
           api('/api/risk/'+encodeURIComponent(current.mint)).then(riskResult=>{
             state.riskByMint[current.mint]=riskResult;
