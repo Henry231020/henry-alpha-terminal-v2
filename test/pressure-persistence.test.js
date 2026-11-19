@@ -76,3 +76,19 @@ test('queries only saved alerts and clamps alert history limit', async () => {
   assert.equal(query.args[0], 'mint-a');
   assert.equal(query.args[1], 100);
 });
+
+test('queries global recent alerts with a bounded parameterized query', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.includes("WHERE kind = 'alert'")) return { rows: [{ mint: 'mint-a', kind: 'alert', payload: { signal: 'URGENT DUMP PRESSURE' } }] };
+    return { rows: [] };
+  } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  const alerts = await store.recentAlertsAll(99999);
+  assert.equal(alerts.length, 1);
+  const query = calls.find(item => item.sql.includes("WHERE kind = 'alert'"));
+  assert.match(query.sql, /ORDER BY observed_at DESC LIMIT \$1/);
+  assert.equal(query.args[0], 100);
+});
