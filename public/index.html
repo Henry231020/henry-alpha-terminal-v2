@@ -65,7 +65,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
   <div class="status"><span class="dot" id="statusDot"></span><span id="connection">Connecting to server…</span></div>
 </header>
 <main>
-  <div class="notice">⚠️ <strong>MONITORING ONLY</strong> — No automatic real-money trading. Token discovery and market data are not proof that a token is safe. Market data may be delayed or unavailable.</div>
+  <div class="notice">⚠️ <strong>ANALYSIS ONLY</strong> — BUY/SELL suggestions are not guaranteed outcomes. No automatic real-money trading. Token discovery and market data are not proof that a token is safe. Market data may be delayed or unavailable.</div>
   <section class="stats">
     <div class="card"><div class="label">TOKENS TRACKED</div><div class="value" id="tokenCount">—</div></div>
     <div class="card"><div class="label">PROVIDER EVENTS</div><div class="value" id="eventCount">—</div></div>
@@ -118,7 +118,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     </section>
   </div>
 </main>
-<footer>HENRY ALPHA TERMINAL V2 · Market data supplied by connected providers · No trade execution</footer>
+<footer>HENRY ALPHA TERMINAL V2 · Market data supplied by connected providers · BUY/SELL decision support · No trade execution</footer>
 
 <script>
 (function(){
@@ -227,7 +227,16 @@ async function selectToken(mint){
       if(panel) {
         const a = pressure.analysis || {};
         const m = a.metrics || {};
-        panel.innerHTML = '<strong>PRESSURE SIGNAL: '+escapeHtml(a.signal||'WAIT')+'</strong><br>Buy volume (last 60s): '+escapeHtml(money(m.buyUsd))+' · Sell volume: '+escapeHtml(money(m.sellUsd))+'<br>Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>Wallet risk: '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+escapeHtml((a.reasons||[]).join(' '))+'<br><span class="muted">Observed data only · alert-only · automatic trading disabled</span>';
+        const d = a.tradeDecision || {};
+        const ind = a.indicators || {};
+        panel.innerHTML = '<strong>TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>' +
+          '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>' +
+          'Price history: '+escapeHtml(number(ind.observations||0))+' observations · '+(ind.ready?'indicators ready':'building indicator history')+' · '+(ind.priceFresh?'price fresh':'price stale')+'<br>' +
+          '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>' +
+          'Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>' +
+          '<strong>Entry/exit reasoning:</strong> '+escapeHtml((d.reasons||[]).join(' '))+'<br>' +
+          '<strong>Risk gates:</strong> liquidity '+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+' · concentration '+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+' · wallet '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>' +
+          '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
       }
     } catch (_) {}
     try {
