@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createHeliusRiskClient } = require('../lib/helius-risk');
+const { createHeliusRiskClient, parseRawTokenAmount } = require('../lib/helius-risk');
 
 test('missing Helius key returns unknown risk without network access', async () => {
   let called = false;
@@ -82,4 +82,78 @@ test('holder scan remains unknown when pagination limit is reached', async () =>
   assert.equal(result.status, 'unknown');
   assert.equal(result.top10ConcentrationPct, null);
   assert.match(result.reason, /page limit/);
+});
+
+test('null or empty holder balances fail closed instead of counting as zero', async () => {
+  const client = createHeliusRiskClient({
+    apiKey: 'test',
+    fetchImpl: async () => ({ ok: true, json: async () => ({ result: { token_accounts: [{ owner: 'wallet-a', amount: null }] } }) })
+  });
+  const result = await client.getHolderRisk('So11111111111111111111111111111111111111112');
+  assert.equal(result.status, 'unknown');
+  assert.equal(result.top10ConcentrationPct, null);
+  assert.match(result.reason, /Incomplete owner or balance data/);
+});
+
+
+test('caches complete Helius scans briefly and preserves the original checkedAt',async()=>{
+  let now=1000,calls=0;
+  const mint='So11111111111111111111111111111111111111112';
+  const client=createHeliusRiskClient({
+    apiKey:'test',clock:()=>now,cacheTtlMs:100,maxCacheEntries:2,
+    fetchImpl:async(_url,options)=>{
+      calls++;
+      const page=JSON.parse(options.body).params.page;
+      return {ok:true,json:async()=>({result:{token_accounts:page===1?[{owner:'wallet-a',amount:'90'},{owner:'wallet-b',amount:'10'}]:[]}})};
+    }
+  });
+  const first=await client.getHolderRisk(mint);
+  now=1050;
+  const cached=await client.getHolderRisk(mint);
+  assert.equal(calls,2);
+  assert.equal(first.checkedAt,1000);
+  assert.equal(cached.cached,true);
+  assert.equal(cached.checkedAt,1000);
+  now=1101;
+  const refreshed=await client.getHolderRisk(mint);
+  assert.equal(calls,4);
+  assert.notEqual(refreshed.cached,true);
+});
+test('does not cache incomplete or unavailable Helius holder scans',async()=>{
+  let calls=0;
+  const mint='So11111111111111111111111111111111111111112';
+  const client=createHeliusRiskClient({
+    apiKey:'test',
+    fetchImpl:async()=>{calls++;return {ok:false,status:503};}
+  });
+  await client.getHolderRisk(mint);
+  await client.getHolderRisk(mint);
+  assert.equal(calls,2);
+  assert.equal(client.cacheStats().entries,0);
+});
+
+
+test('holder concentration uses exact integer arithmetic for large raw balances',async()=>{
+  const mint='So11111111111111111111111111111111111111112';
+  const amounts=['9007199254740993000',...Array(10).fill('1000000000000000000')];
+  const client=createHeliusRiskClient({
+    apiKey:'test',
+    fetchImpl:async(_url,options)=>{
+      const page=JSON.parse(options.body).params.page;
+      const rows=page===1?amounts.map((amount,index)=>({owner:'wallet-'+index,amount})):[];
+      return {ok:true,json:async()=>({result:{token_accounts:rows}})};
+    }
+  });
+  const result=await client.getHolderRisk(mint);
+  const total=amounts.reduce((sum,value)=>sum+BigInt(value),0n);
+  const top10=amounts.map(BigInt).sort((a,b)=>a>b?-1:a<b?1:0).slice(0,10).reduce((sum,value)=>sum+value,0n);
+  const expected=Number((top10*1000000n+total/2n)/total)/10000;
+  assert.equal(result.status,'observed');
+  assert.equal(result.top10ConcentrationPct,expected);
+});
+test('rejects unsafe numeric and non-integer raw token balances',()=>{
+  assert.equal(parseRawTokenAmount('9007199254740993000'),9007199254740993000n);
+  assert.equal(parseRawTokenAmount(Number.MAX_SAFE_INTEGER+1),null);
+  assert.equal(parseRawTokenAmount('1.5'),null);
+  assert.equal(parseRawTokenAmount(''),null);
 });

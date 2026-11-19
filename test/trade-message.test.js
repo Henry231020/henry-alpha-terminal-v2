@@ -45,3 +45,21 @@ test('does not treat unrelated launch messages as rejected trade candidates', ()
   assert.equal(result.ok, false);
   assert.equal(result.candidate, false);
 });
+
+test('does not classify PumpPortal create events with traderPublicKey as rejected trades', () => {
+  const result = parseTradeMessage({
+    txType: 'create',
+    mint: 'MintAddress',
+    traderPublicKey: 'CreatorWallet',
+    name: 'New token',
+    symbol: 'NEW'
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.candidate, false);
+  const createWithAmounts = parseTradeMessage({
+    txType: 'create', mint: 'MintAddress', traderPublicKey: 'CreatorWallet',
+    solAmount: 1, initialBuy: 1000
+  });
+  assert.equal(createWithAmounts.ok, false);
+  assert.equal(createWithAmounts.candidate, false);
+});

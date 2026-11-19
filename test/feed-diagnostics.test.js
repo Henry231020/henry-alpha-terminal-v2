@@ -13,6 +13,7 @@ test('records message and valid-trade timestamps independently', () => {
     validTradeMessages: 1,
     recordedTrades: 0,
     priceUnavailable: 0,
+    stalePriceValuations: 0,
     storeRejectedTrades: 0,
     rejectedTradeCandidates: 0,
     malformedJsonMessages: 0,
@@ -70,4 +71,12 @@ test('distinguishes validated trades from recorded trades and processing failure
     lastRecorded: '2026-10-25T00:00:02.000Z',
     issue: null
   });
+});
+
+test('counts trade observations rejected for stale SOL/USD quotes', () => {
+  const diagnostics = createFeedDiagnostics();
+  diagnostics.recordStalePriceValuation();
+  const snapshot = diagnostics.snapshot();
+  assert.equal(snapshot.stalePriceValuations, 1);
+  assert.match(snapshot.lastProcessingIssue, /more than 60 seconds/);
 });

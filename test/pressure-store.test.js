@@ -69,3 +69,78 @@ test('holder-only risk updates preserve liquidity and fail closed on malformed c
   assert.equal(risk.holderConcentrationPct, null);
   assert.equal(risk.walletRisk, 'unknown');
 });
+
+test('cached provider quotes cannot inflate price-history observations', () => {
+  const now = 1000000;
+  const store = new PressureStore({ clock: () => now });
+  assert.equal(store.recordSnapshot('mint', { timestamp: now - 1000, priceUsd: 1 }), true);
+  assert.equal(store.recordSnapshot('mint', { timestamp: now - 1000, priceUsd: 1 }), false);
+  assert.equal(store.recordSnapshot('mint', { timestamp: now, priceUsd: 1.1 }), true);
+  assert.equal(store.getStats().snapshotCount, 2);
+});
+
+test('holder and RugCheck risk gates expire after five minutes',()=>{
+ let now=2000000;const store=new PressureStore({clock:()=>now});
+ store.updateLiquidity('mint',20000);
+ store.updateHolderRisk('mint',{holderConcentrationPct:20,walletRisk:'low'});
+ let analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'low');
+ assert.equal(analysis.gates.concentrationOk,true);
+ now+=5*60*1000+1;
+ analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'unknown');
+ assert.equal(analysis.gates.concentrationOk,false);
+});
+test('restored risk uses its persisted observation time rather than becoming fresh',()=>{
+ let now=3000000;const store=new PressureStore({clock:()=>now});
+ assert.equal(store.restoreObservation('mint','risk',now-6*60*1000,{holderConcentrationPct:10,walletRisk:'low'}),true);
+ const analysis=store.analyse('mint');
+ assert.equal(analysis.gates.walletRisk,'unknown');
+ assert.equal(analysis.gates.concentrationOk,false);
+});
+
+test('pressure store bounds retained token state during long-running token churn', () => {
+  const { MAX_TRACKED_MINTS } = require('../lib/pressure-store');
+  const store = new PressureStore();
+  for (let i = 0; i < MAX_TRACKED_MINTS + 1; i++) store.updateLiquidity('mint-' + i, 10000);
+  assert.equal(store.byMint.size, MAX_TRACKED_MINTS);
+  assert.equal(store.byMint.has('mint-0'), false);
+  assert.equal(store.byMint.has('mint-' + MAX_TRACKED_MINTS), true);
+});
+
+
+test('liquidity evidence expires independently after two minutes',()=>{
+  let now=4000000;
+  const store=new PressureStore({clock:()=>now});
+  store.updateLiquidity('mint',25000,now);
+  store.updateHolderRisk('mint',{holderConcentrationPct:12,walletRisk:'low',checkedAt:now});
+  let analysis=store.analyse('mint');
+  assert.equal(analysis.gates.liquidityOk,true);
+  now+=2*60*1000+1;
+  analysis=store.analyse('mint');
+  assert.equal(analysis.gates.liquidityOk,false);
+  assert.match(analysis.reasons.join(' '),/Liquidity missing/);
+  assert.equal(analysis.gates.walletRisk,'low');
+});
+test('old or future-dated liquidity observations cannot pass the freshness gate',()=>{
+  let now=5000000;
+  const store=new PressureStore({clock:()=>now});
+  store.updateLiquidity('mint',30000,now-2*60*1000-1);
+  store.updateHolderRisk('mint',{holderConcentrationPct:10,walletRisk:'low',checkedAt:now});
+  assert.equal(store.analyse('mint').gates.liquidityOk,false);
+  store.updateLiquidity('mint',30000,now+6000);
+  assert.equal(store.analyse('mint').gates.liquidityOk,false);
+});
+
+
+test('pressure store refreshes active mints before LRU eviction',()=>{
+  const { MAX_TRACKED_MINTS } = require('../lib/pressure-store');
+  const store = new PressureStore();
+  for (let i = 0; i < MAX_TRACKED_MINTS; i++) store.updateLiquidity('mint-' + i, 10000);
+  store.updateLiquidity('mint-0', 12000);
+  store.updateLiquidity('mint-new', 15000);
+  assert.equal(store.byMint.has('mint-0'), true);
+  assert.equal(store.byMint.has('mint-1'), false);
+  assert.equal(store.byMint.has('mint-new'), true);
+  assert.equal(store.byMint.size, MAX_TRACKED_MINTS);
+});

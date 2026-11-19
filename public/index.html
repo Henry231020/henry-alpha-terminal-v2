@@ -65,7 +65,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
   <div class="status"><span class="dot" id="statusDot"></span><span id="connection">Connecting to server…</span></div>
 </header>
 <main>
-  <div class="notice">⚠️ <strong>MONITORING ONLY</strong> — No automatic real-money trading. Token discovery and market data are not proof that a token is safe. Market data may be delayed or unavailable.</div>
+  <div class="notice">⚠️ <strong>ANALYSIS ONLY</strong> — BUY/SELL suggestions are not guaranteed outcomes. No automatic real-money trading. Token discovery and market data are not proof that a token is safe. Market data may be delayed or unavailable.</div>
   <section class="stats">
     <div class="card"><div class="label">TOKENS TRACKED</div><div class="value" id="tokenCount">—</div></div>
     <div class="card"><div class="label">PROVIDER EVENTS</div><div class="value" id="eventCount">—</div></div>
@@ -75,21 +75,47 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
   <section class="panel" style="margin-bottom:18px;padding:14px 16px">
     <div class="panel-head" style="padding:0 0 10px;border:0"><h2>LIVE TRADE FEED DIAGNOSTICS</h2><span class="pill" id="tradeFeedState">Waiting for status</span></div>
     <div class="detail-grid" style="margin:0">
-      <div class="detail-stat"><div class="label">MESSAGES RECEIVED</div><div class="value" id="feedMessages">—</div></div>
-      <div class="detail-stat"><div class="label">VALID TRADE MESSAGES</div><div class="value" id="feedValidTrades">—</div></div>
+      <div class="detail-stat"><div class="label">GECKO API CALLS</div><div class="value" id="feedMessages">—</div></div>
+      <div class="detail-stat"><div class="label">RECENT POOL TRADES SEEN</div><div class="value" id="feedValidTrades">—</div></div>
       <div class="detail-stat"><div class="label">TRADES RECORDED</div><div class="value" id="feedRecordedTrades">—</div></div>
-      <div class="detail-stat"><div class="label">PRICE UNAVAILABLE</div><div class="value" id="feedPriceUnavailable">—</div></div>
-      <div class="detail-stat"><div class="label">STORE REJECTIONS</div><div class="value" id="feedStoreRejected">—</div></div>
-      <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
-      <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
+      <div class="detail-stat"><div class="label">DUPLICATE / STALE TRADES</div><div class="value" id="feedPriceUnavailable">—</div></div>
+      <div class="detail-stat"><div class="label">GECKO API ERRORS</div><div class="value" id="feedStaleValuations">—</div></div>
+      <div class="detail-stat"><div class="label">RECORDED TRADES</div><div class="value" id="feedStoreRejected">—</div></div>
+      <div class="detail-stat"><div class="label">SEEN TRANSACTION KEYS</div><div class="value" id="feedRejectedTrades">—</div></div>
+      <div class="detail-stat"><div class="label">LAST POLL STATUS</div><div class="value" id="feedMalformed">—</div></div>
     </div>
-    <div class="muted" style="margin-top:10px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
+    <div class="muted" style="margin-top:10px" id="feedSubscriptions">Token-trade subscriptions: — / — · Helius API key: — · RugCheck: —</div>
+    <div class="muted" style="margin-top:6px" id="feedLastSeen">Live-feed compatibility has not yet been verified. These counters reset when the server restarts.</div>
+  </section>
+
+  <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><h2>LIVE URGENT BUY / SELL ALERTS</h2><span class="pill">RECENT · MEMORY + DATABASE</span></div>
+    <div class="events" id="urgentAlertRows"><div class="empty">No urgent pressure alerts received yet.</div></div>
+  </section>
+
+  <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head"><h2>PAPER TRADE LEARNING & REVIEW</h2><span class="pill">SIMULATED · NO REAL ORDERS</span></div>
+    <div class="detail" id="learningPanel">
+      <div class="detail-grid" style="margin:0">
+        <div class="detail-stat"><div class="label">CLOSED PAPER TRADES</div><div class="value" id="learnClosed">0</div></div>
+        <div class="detail-stat"><div class="label">WIN RATE</div><div class="value" id="learnWinRate">—</div></div>
+        <div class="detail-stat"><div class="label">AVERAGE PAPER P&L</div><div class="value" id="learnAvgPnl">—</div></div>
+        <div class="detail-stat"><div class="label">OPEN PAPER POSITIONS</div><div class="value" id="learnOpen">0</div></div>
+      </div>
+      <div class="muted" id="learnNote" style="margin-top:12px">Waiting for paper-trade outcomes. The system does not change strategy rules automatically.</div>
+      <div id="learnFactors" style="margin-top:10px"></div>
+      <div id="learnExits" style="margin-top:10px"></div>
+      <div id="learnRecent" style="margin-top:10px"></div>
+    </div>
   </section>
 
   <div class="controls">
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
     <select id="sort">
       <option value="newest">Newest activity</option>
+      <option value="buy">BUY setups first</option>
+      <option value="sell">SELL warnings first</option>
+      <option value="watchlist">Risk-unverified watchlist first</option>
       <option value="liquidity">Highest liquidity</option>
       <option value="volume">Highest 24h volume</option>
       <option value="marketcap">Highest market cap</option>
@@ -102,8 +128,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
       <div class="panel-head"><h2>DISCOVERED SOLANA TOKENS</h2><span class="muted" id="listInfo">Waiting for data</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>TOKEN</th><th>PRICE USD</th><th>MARKET CAP</th><th>LIQUIDITY</th><th>24H VOLUME</th><th>24H CHANGE</th></tr></thead>
-          <tbody id="tokenRows"><tr><td colspan="6" class="empty">Connecting to token feed…</td></tr></tbody>
+          <thead><tr><th>TOKEN</th><th>PRICE USD</th><th>MARKET CAP</th><th>LIQUIDITY</th><th>24H VOLUME</th><th>24H CHANGE</th><th>BUY / SELL DECISION</th></tr></thead>
+          <tbody id="tokenRows"><tr><td colspan="7" class="empty">Connecting to token feed…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -118,13 +144,13 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     </section>
   </div>
 </main>
-<footer>HENRY ALPHA TERMINAL V2 · Market data supplied by connected providers · No trade execution</footer>
+<footer>HENRY ALPHA TERMINAL V2 · Market data supplied by connected providers · BUY/SELL decision support · No trade execution</footer>
 
 <script>
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const state={tokens:[],events:[],selectedMint:null,ws:null,retry:2000,connected:false};
+const state={tokens:[],events:[],pressureAlerts:[],pressureByMint:{},riskByMint:{},riskLoadingByMint:{},riskRetryAtByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
 const money=n=>{
   if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
   n=Number(n);
@@ -139,6 +165,25 @@ const shortMint=m=>m&&m.length>16?m.slice(0,7)+'…'+m.slice(-6):(m||'—');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateText=d=>{if(!d)return '—';const t=Date.parse(d);return Number.isFinite(t)?new Date(t).toLocaleString():'—';};
 const ageText=d=>{const t=Date.parse(d||'');if(!Number.isFinite(t))return '—';const m=Math.max(0,Math.floor((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.floor(m/60)+'h':Math.floor(m/1440)+'d';};
+function walletCoverageMarkup(wi){
+  const hasRows=Number(wi?.observedWallets)>0;
+  const earlyVerified=String(wi?.coverage||'').startsWith('Observed wallet-labelled trades since');
+  return 'Unique observed buyers: '+escapeHtml(hasRows?number(wi.uniqueBuyers):'UNVERIFIED')+
+    ' · Early buyers (first 5 min): '+escapeHtml(earlyVerified?number(wi.earlyBuyers):'UNVERIFIED')+
+    ' · Early buyers seen across multiple tokens: '+escapeHtml(earlyVerified?number(wi.repeatEarlyBuyers):'UNVERIFIED')+'<br>';
+}
+function riskMarkup(result){
+  const h=result?.risk||{}, r=result?.rugcheck||{};
+  const holderObserved=h.status==='observed'&&Number.isFinite(Number(h.top10ConcentrationPct));
+  const rugObserved=r.status==='observed';
+  const walletRisk=rugObserved?r.walletRisk:'unknown';
+  return '<h4 style="margin:12px 0 6px">TOKEN SECURITY & HOLDER RISK</h4>'+
+    '<div>Helius top-10 owner concentration: <strong>'+(holderObserved?escapeHtml(Number(h.top10ConcentrationPct).toFixed(2)+'%'):'UNVERIFIED')+'</strong> · Holders: '+escapeHtml(holderObserved?number(h.holderCount):'Unknown')+'</div>'+
+    '<div>RugCheck classification: <strong>'+escapeHtml(walletRisk.toUpperCase())+'</strong> · Score: '+escapeHtml(r.scoreNormalised==null?'Unknown':r.scoreNormalised+'/100')+' · Detected insider wallets: '+escapeHtml(r.graphInsidersDetected==null?'Unknown':number(r.graphInsidersDetected))+'</div>'+
+    '<div class="muted">'+escapeHtml(r.reason||'RugCheck report unavailable; wallet-risk gate remains closed.')+' Checked: '+escapeHtml(dateText(result?.checkedAt))+'</div>'+
+    (r.dangerRisks&&r.dangerRisks.length?'<div class="red">Danger findings: '+r.dangerRisks.map(x=>escapeHtml(x.name)).join(', ')+'</div>':'')+
+    '<div class="muted">Third-party risk reports are snapshots, not guarantees. Missing data never passes the BUY risk gate.</div>';
+}
 function setConnection(text,ok){
   $('connection').textContent=text;
   $('statusDot').style.background=ok?'#32d583':'#f5c76a';
@@ -154,6 +199,16 @@ function filteredTokens(){
   const list=state.tokens.filter(t=>!q||[t.name,t.symbol,t.mint].some(v=>String(v||'').toLowerCase().includes(q)));
   const sort=$('sort').value;
   list.sort((a,b)=>{
+    if(['buy','sell','watchlist'].includes(sort)){
+      const rank = action => {
+        if(sort==='buy') return action==='BUY SETUP'?0:action==='WATCHLIST — RISK UNVERIFIED'?1:action==='SELL / EXIT WARNING'?3:2;
+        if(sort==='sell') return action==='SELL / EXIT WARNING'?0:action==='BUY SETUP'?3:1;
+        return action==='WATCHLIST — RISK UNVERIFIED'?0:action==='BUY SETUP'?1:action==='SELL / EXIT WARNING'?3:2;
+      };
+      const diff=rank(state.pressureByMint[a.mint]?.action||'WAIT')-rank(state.pressureByMint[b.mint]?.action||'WAIT');
+      if(diff)return diff;
+      return Date.parse(b.lastEventAt||b.firstSeenAt||0)-Date.parse(a.lastEventAt||a.firstSeenAt||0);
+    }
     if(sort==='liquidity')return (b.liquidityUsd||0)-(a.liquidityUsd||0);
     if(sort==='volume')return (b.volume24h||0)-(a.volume24h||0);
     if(sort==='marketcap')return (b.marketCapUsd||0)-(a.marketCapUsd||0);
@@ -166,7 +221,7 @@ function renderTokens(){
   const list=filteredTokens();
   $('listInfo').textContent=list.length+' shown';
   if(!list.length){
-    $('tokenRows').innerHTML='<tr><td colspan="6" class="empty">No tokens found yet. Launch/migration events populate this list. Try Refresh.</td></tr>';
+    $('tokenRows').innerHTML='<tr><td colspan="7" class="empty">No tokens found yet. Launch/migration events populate this list. Try Refresh.</td></tr>';
     return;
   }
   $('tokenRows').innerHTML=list.map(t=>{
@@ -177,9 +232,20 @@ function renderTokens(){
     const img='<span class="token-avatar">'+initials+'</span>'+(t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'');
     return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
       '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
-      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
+      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td><td><span class="pill '+(String(state.pressureByMint[t.mint]?.action||'').includes('SELL')?'red':String(state.pressureByMint[t.mint]?.action||'').includes('BUY SETUP')?'green':'')+'">'+escapeHtml(state.pressureByMint[t.mint]?.action||'WAIT')+'</span></td></tr>';
   }).join('');
   $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
+}
+function renderPressureAlerts(){
+  const root=$('urgentAlertRows');
+  if(!root)return;
+  if(!state.pressureAlerts.length){root.innerHTML='<div class="empty">No urgent pressure alerts received yet. Alerts appear here even when PostgreSQL is not configured.</div>';return;}
+  root.innerHTML=state.pressureAlerts.slice(0,12).map(alert=>{
+    const signal=String(alert.signal||'Pressure alert');
+    const isSell=signal.includes('DUMP')||signal.includes('SELL');
+    return '<div class="event"><strong class="'+(isSell?'red':'green')+'">'+escapeHtml(signal)+'</strong> · '+escapeHtml(shortMint(alert.mint||''))+
+      '<div class="muted">'+escapeHtml(dateText(alert.receivedAt||alert.observedAt))+' · Alert only; no order was placed.</div></div>';
+  }).join('');
 }
 function renderEvents(){
   $('eventCount').textContent=number(state.events.length);
@@ -220,18 +286,37 @@ async function selectToken(mint){
   $('detail').innerHTML='<div class="empty">Loading token market data…</div>';
   try{
     const result=await api('/api/token/'+encodeURIComponent(mint));
+    if(state.selectedMint!==mint)return;
     renderDetail(result.token,result.recentEvents||[],result.dataNotes||{});
     try {
       const pressure = await api('/api/pressure?mint='+encodeURIComponent(mint));
+      if(state.selectedMint!==mint)return;
       const panel = $('pressurePanel');
       if(panel) {
         const a = pressure.analysis || {};
         const m = a.metrics || {};
-        panel.innerHTML = '<strong>PRESSURE SIGNAL: '+escapeHtml(a.signal||'WAIT')+'</strong><br>Buy volume (last 60s): '+escapeHtml(money(m.buyUsd))+' · Sell volume: '+escapeHtml(money(m.sellUsd))+'<br>Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>Wallet risk: '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+escapeHtml((a.reasons||[]).join(' '))+'<br><span class="muted">Observed data only · alert-only · automatic trading disabled</span>';
+        const d = a.tradeDecision || {};
+        const ind = a.indicators || {};
+        panel.innerHTML = '<strong id="decisionAction">TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>' +
+          '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>' +
+          'Price history: '+escapeHtml(number(ind.observations||0))+' observations · '+(ind.ready?'indicators ready':'building indicator history')+' · '+(ind.priceFresh?'price fresh':'price stale')+'<br>' +
+          '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>' +
+          'Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>' +
+          '<strong>Entry/exit reasoning:</strong> <span id="decisionReasons">'+escapeHtml((d.reasons||[]).join(' '))+'</span><br>' +
+          (a.tradePlan ? '<strong>Illustrative trade plan:</strong> Entry '+escapeHtml(money(a.tradePlan.referenceEntryPrice))+' · Stop '+escapeHtml(money(a.tradePlan.stopLossPrice))+' ('+escapeHtml(a.tradePlan.stopLossPct)+'%) · TP1 '+escapeHtml(money(a.tradePlan.takeProfit1Price))+' (+50%) · TP2 '+escapeHtml(money(a.tradePlan.takeProfit2Price))+' (+100%)<br><span class="muted">'+escapeHtml(a.tradePlan.note)+'</span><br>' : '') +
+          '<strong>Risk gates:</strong> liquidity <span id="riskLiquidity">'+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+'</span> · concentration <span id="riskConcentration">'+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+'</span> · wallet <span id="riskWallet">'+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'</span><br>' +
+          '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
+        const wi = pressure.walletIntelligence || {};
+        panel.innerHTML += '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>' +
+          walletCoverageMarkup(wi) +
+          (wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong><br>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.<br>') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.<br>') +
+          '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span>' +
+          (wi.wallets&&wi.wallets.length ? '<div class="muted" style="margin-top:6px">First observed early buyers: '+wi.wallets.slice(0,5).map(x=>escapeHtml(shortMint(x.wallet))+' ('+escapeHtml(number(x.tokensSeen))+' tokens seen)').join(' · ')+'</div>' : '');
       }
     } catch (_) {}
     try {
       const saved = await api('/api/alerts?mint='+encodeURIComponent(mint)+'&limit=10');
+      if(state.selectedMint!==mint)return;
       const panel = $('pressurePanel');
       if(panel) {
         const history = saved.alerts || [];
@@ -240,51 +325,116 @@ async function selectToken(mint){
       }
     } catch (_) {}
     try {
+      state.riskLoadingByMint[mint]=true;
       const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
-      const risk = riskResult.risk || {};
+      state.riskLoadingByMint[mint]=false;
+      delete state.riskRetryAtByMint[mint];
+      if(state.selectedMint!==mint)return;
+      state.riskByMint[mint]=riskResult;
+      const updatedAnalysis = riskResult.analysis || {};
+      const updatedDecision = updatedAnalysis.tradeDecision || {};
+      const decisionAction = $('decisionAction');
+      const decisionReasons = $('decisionReasons');
+      const riskLiquidity = $('riskLiquidity');
+      const riskConcentration = $('riskConcentration');
+      const riskWallet = $('riskWallet');
+      if(decisionAction) decisionAction.textContent='TRADE DECISION: '+(updatedDecision.action||'WAIT');
+      if(decisionReasons) decisionReasons.textContent=(updatedDecision.reasons||[]).join(' ');
+      if(riskLiquidity) riskLiquidity.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.liquidityOk?'PASS':'NOT PASSED';
+      if(riskConcentration) riskConcentration.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.concentrationOk?'PASS':'NOT PASSED';
+      if(riskWallet) riskWallet.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.walletRisk||'unknown';
       const panel = $('pressurePanel');
-      if(panel) {
-        const observed = risk.status === 'observed' && Number.isFinite(Number(risk.top10ConcentrationPct));
-        panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4>' +
-          '<div><strong>'+ (observed ? 'Observed holder data' : 'UNVERIFIED — do not treat as safe') + '</strong></div>' +
-          '<div>Top-10 owner concentration: '+ escapeHtml(observed ? Number(risk.top10ConcentrationPct).toFixed(2)+'%' : 'Unknown') + '</div>' +
-          '<div>Unique holders observed: '+ escapeHtml(observed ? number(risk.holderCount) : 'Unknown') + '</div>' +
-          '<div>Wallet/scam risk: <strong>UNKNOWN</strong> — concentration alone cannot verify safety.</div>' +
-          '<div class="muted">'+escapeHtml(risk.reason || 'No complete holder scan result available.')+'</div>';
-      }
+      if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
+      state.riskLoadingByMint[mint]=false;
+      state.riskRetryAtByMint[mint]=Date.now()+30000;
+      state.riskByMint[mint]={checkedAt:null,risk:{status:'unknown'},rugcheck:{status:'unknown'}};
       const panel = $('pressurePanel');
-      if(panel) panel.innerHTML += '<h4 style="margin:12px 0 6px">HOLDER CONCENTRATION CHECK</h4><div><strong>UNVERIFIED — do not treat as safe</strong></div><div>Wallet/scam risk: UNKNOWN. Risk service unavailable.</div>';
+      if(panel) panel.innerHTML += riskMarkup(null);
     }
 
   }catch(e){
+    if(state.selectedMint!==mint)return;
     const t=state.tokens.find(x=>x.mint===mint);
     renderDetail(t,[]);
   }
 }
 async function refreshAll(){
   try{
-    const [status,list,events]=await Promise.all([
-      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events')
+    const [status,list,events,learning,pressure,recentAlerts]=await Promise.all([
+      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8'),api('/api/pressure?limit=500'),api('/api/alerts/recent?limit=20')
     ]);
     state.tokens=list.tokens||[];
     state.events=events||[];
+    state.pressureAlerts=recentAlerts.alerts||[];
+    state.pressureByMint=Object.fromEntries((pressure.pressure||[]).map(item=>[item.mint,item.analysis?.tradeDecision||{action:'WAIT'}]));
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
-    const fd=status.feedDiagnostics||{};
-    $('feedMessages').textContent=number(fd.messagesReceived);
-    $('feedValidTrades').textContent=number(fd.validTradeMessages);
-    $('feedRecordedTrades').textContent=number(fd.recordedTrades);
-    $('feedPriceUnavailable').textContent=number(fd.priceUnavailable);
-    $('feedStoreRejected').textContent=number(fd.storeRejectedTrades);
-    $('feedRejectedTrades').textContent=number(fd.rejectedTradeCandidates);
-    $('feedMalformed').textContent=number(fd.malformedJsonMessages);
-    $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+' · Last recorded: '+(fd.lastRecordedTradeAt?dateText(fd.lastRecordedTradeAt):'none yet')+(fd.lastProcessingIssue?' · Processing issue: '+fd.lastProcessingIssue:'')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+'. Counts reset when server restarts; live format not independently verified.';
+    const gecko=status.geckoTradeFeed||{};
+    $('feedSubscriptions').textContent='Free GeckoTerminal public API · approx. 10 calls/min limit; app polls at max 8/min · PumpPortal discovery only · Helius: '+(status.heliusRisk||'unknown')+' · RugCheck: '+(status.rugCheckRisk||'unknown');
+    $('feedMessages').textContent=number(gecko.calls);
+    $('feedValidTrades').textContent=number(gecko.tradesSeen);
+    $('feedRecordedTrades').textContent=number(gecko.tradesRecorded);
+    $('feedPriceUnavailable').textContent=number(gecko.duplicateOrStale);
+    $('feedStaleValuations').textContent=number(gecko.errors);
+    $('feedStoreRejected').textContent=number(status.feedDiagnostics?.storeRejectedTrades||0);
+    $('feedRejectedTrades').textContent=number(gecko.seenTransactionKeys);
+    $('feedMalformed').textContent=gecko.status||'—';
+    $('feedLastSeen').textContent='Last pool trade: '+(gecko.lastTradeAt||'not yet observed')+' · Last API call: '+(gecko.lastCallAt||'not yet called')+' · '+(gecko.lastError||'No provider error reported.');
+    $('feedLastSeen').textContent='Last message: '+(fd.lastMessageAt?dateText(fd.lastMessageAt):'none yet')+' · Last valid: '+(fd.lastValidTradeAt?dateText(fd.lastValidTradeAt):'none yet')+' · Last recorded: '+(fd.lastRecordedTradeAt?dateText(fd.lastRecordedTradeAt):'none yet')+(fd.lastProcessingIssue?' · Processing issue: '+fd.lastProcessingIssue:'')+(fd.lastRejectedReason?' · Latest rejection: '+fd.lastRejectedReason:'')+' · SOL/USD quote age: '+(status.solUsdQuoteAgeMs==null?'unavailable':Math.round(status.solUsdQuoteAgeMs/1000)+'s')+(status.solUsdRetryAfter?' · Quote retry after: '+dateText(status.solUsdRetryAfter):'')+'. Counts reset when server restarts; live format not independently verified.';
     $('refreshTime').textContent=status.lastDexRefresh?dateText(status.lastDexRefresh):'Waiting…';
-    renderTokens();renderEvents();
+    $('learnClosed').textContent=number(learning.closedTrades||0);
+    $('learnWinRate').textContent=learning.winRatePct==null?'—':learning.winRatePct+'%';
+    $('learnAvgPnl').textContent=learning.averagePnlPct==null?'—':(learning.averagePnlPct>0?'+':'')+learning.averagePnlPct+'%';
+    $('learnAvgPnl').className='value '+(learning.averagePnlPct>0?'green':learning.averagePnlPct<0?'red':'');
+    $('learnOpen').textContent=number(learning.openPaperPositions||0);
+    $('learnNote').textContent=(learning.learningNote||'Learning summary unavailable')+' Historical paper outcomes are descriptive, not proof of causation. Paper-only baseline: -15% stop / +50% take-profit; these are provisional test thresholds, not confirmed live settings. Storage: '+(learning.persistence&&learning.persistence.ready?'PostgreSQL — survives server restarts':'memory only — configure DATABASE_URL to retain learning after a server restart.');
+    const factorRows=Object.entries(learning.factorStats||{}).filter(([,v])=>v.trades>=2).sort((a,b)=>b[1].trades-a[1].trades).slice(0,8);
+    $('learnFactors').innerHTML='<h4 style="margin:10px 0 6px">WHAT ENTRY CONDITIONS HAVE WORKED?</h4>'+
+      (factorRows.length?factorRows.map(([name,v])=>'<div class="event">'+escapeHtml(name)+' · '+escapeHtml(number(v.trades))+' trades · '+escapeHtml((v.wins/v.trades*100).toFixed(0))+'% wins · Avg '+escapeHtml((v.averagePnlPct>0?'+':'')+v.averagePnlPct+'%')+'</div>').join(''):'<div class="muted">Not enough repeated outcomes yet. Each factor needs at least two closed paper trades before it is shown.</div>')+
+      '<div class="muted">Descriptive comparisons only; small samples and changing market conditions can mislead. No automatic strategy changes.</div>';
+const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[1].trades);
+    $('learnExits').innerHTML='<h4 style="margin:10px 0 6px">HOW EXIT SIGNALS PERFORMED</h4>'+
+      (exitRows.length?exitRows.map(([name,v])=>'<div class="event">'+escapeHtml(name)+' · '+escapeHtml(number(v.trades))+' exits · '+escapeHtml(number(v.wins))+' wins / '+escapeHtml(number(v.losses))+' losses · Avg '+escapeHtml((v.averagePnlPct>0?'+':'')+v.averagePnlPct+'%')+'</div>').join(''):'<div class="muted">Exit-outcome statistics will appear after paper positions close.</div>');
+        $('learnRecent').innerHTML=(learning.recentTrades||[]).slice(0,8).map(t=>'<div class="event"><strong class="'+(t.outcome==='WIN'?'green':t.outcome==='LOSS'?'red':'')+'">'+escapeHtml(t.outcome||'PAPER TRADE')+'</strong> · '+escapeHtml(shortMint(t.mint))+' · '+escapeHtml((t.pnlPct>0?'+':'')+t.pnlPct+'%')+'<div class="muted">Entry: '+escapeHtml((t.entryReasons||[]).join(' '))+' Exit: '+escapeHtml(t.exitReason||'—')+'</div></div>').join('') || '<div class="muted">No closed paper trades yet. Paper entries are created only when all BUY SETUP data-quality checks pass.</div>';
+    renderTokens();renderEvents();renderPressureAlerts();
     if(state.selectedMint){
       const current=state.tokens.find(t=>t.mint===state.selectedMint);
-      if(current)renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
+      if(current){
+        renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
+        const cachedRisk=state.riskByMint[current.mint], riskAge=cachedRisk?.checkedAt?Date.now()-Date.parse(cachedRisk.checkedAt):Infinity;
+        if(riskAge>5*60*1000&&Date.now()>=(state.riskRetryAtByMint[current.mint]||0)&&!state.riskLoadingByMint[current.mint]){
+          state.riskLoadingByMint[current.mint]=true;
+          api('/api/risk/'+encodeURIComponent(current.mint)).then(riskResult=>{
+            state.riskByMint[current.mint]=riskResult;
+            delete state.riskRetryAtByMint[current.mint];
+            const panel=$('pressurePanel');if(panel&&state.selectedMint===current.mint)panel.innerHTML+=riskMarkup(riskResult);
+          }).catch(()=>{state.riskByMint[current.mint]={checkedAt:null,risk:{status:'unknown'},rugcheck:{status:'unknown'}};state.riskRetryAtByMint[current.mint]=Date.now()+30000;}).finally(()=>{state.riskLoadingByMint[current.mint]=false;});
+        }
+        // Keep the selected token's live decision panel visible after the 15-second dashboard refresh.
+        api('/api/token/'+encodeURIComponent(state.selectedMint)).then(tokenResult=>{
+          if(state.selectedMint!==current.mint) return null;
+          const fresh=tokenResult.token;
+          if(fresh){const index=state.tokens.findIndex(t=>t.mint===current.mint);if(index>=0)state.tokens[index]=fresh;renderTokens();renderDetail(fresh,state.events.filter(e=>(e.data||{}).mint===current.mint),tokenResult.dataNotes||{});}
+          return api('/api/pressure?mint='+encodeURIComponent(current.mint));
+        }).then(result=>{
+          const panel=$('pressurePanel'); if(!result || !panel || state.selectedMint!==current.mint) return;
+          const a=result.analysis||{}, d=a.tradeDecision||{}, ind=a.indicators||{}, m=a.metrics||{}, wi=result.walletIntelligence||{};
+          state.pressureByMint[current.mint]=d;renderTokens();
+          const burstText=wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.';
+          panel.innerHTML='<strong>TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>'+
+            '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>'+
+            'Price history: '+escapeHtml(number(ind.observations||0))+' observations · '+(ind.ready?'indicators ready':'building indicator history')+' · '+(ind.priceFresh?'price fresh':'price stale')+'<br>'+
+            '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>'+
+            '<strong>Entry/exit reasoning:</strong> '+escapeHtml((d.reasons||[]).join(' '))+'<br>'+
+            '<strong>Risk gates:</strong> liquidity '+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+' · concentration '+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+' · wallet '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+
+            '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>'+
+            walletCoverageMarkup(wi)+burstText+'<br>'+
+            '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span><br>'+
+            '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
+          if(state.riskByMint[current.mint]) panel.innerHTML += riskMarkup(state.riskByMint[current.mint]);
+        }).catch(()=>{});
+      }
     }
     if(!state.connected)setConnection('Server reachable · live feed pending',false);
   }catch(e){setConnection('Server unavailable · retrying',false);}
@@ -311,6 +461,10 @@ function connectWS(){
         }
         state.events=state.events.slice(0,500);
         renderTokens();renderEvents();
+      }else if(msg.type==='pressure-alert'){
+        state.pressureAlerts.unshift(msg);
+        state.pressureAlerts=state.pressureAlerts.slice(0,20);
+        renderPressureAlerts();
       }else if(msg.type==='market-update'&&msg.token){
         const i=state.tokens.findIndex(t=>t.mint===msg.token.mint);
         if(i>=0)state.tokens[i]=msg.token;
