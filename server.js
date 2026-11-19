@@ -377,13 +377,13 @@ async function refreshOneToken(mint) {
     };
 
     tokens.set(mint, merged);
-    pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+    pressureStore.updateLiquidity(mint, merged.liquidityUsd, merged.checkedAt || Date.now());
     if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
       const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
       const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
       if (snapshotRecorded) persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
       if (snapshotRecorded) {
-        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd, merged.checkedAt || Date.now());
         const analysis = pressureStore.analyse(mint);
         const decisionAction = analysis.tradeDecision?.action;
         if (decisionAction === 'BUY SETUP' || decisionAction === 'SELL / EXIT WARNING') {
@@ -765,13 +765,13 @@ const server = http.createServer(async (req, res) => {
         };
 
         tokens.set(mint, merged);
-        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd, merged.checkedAt || Date.now());
         if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
           const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
           const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
           if (snapshotRecorded) persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
           if (snapshotRecorded) {
-            pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+            pressureStore.updateLiquidity(mint, merged.liquidityUsd, merged.checkedAt || Date.now());
             const analysis = pressureStore.analyse(mint);
             const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: snapshot.timestamp });
             if (learningResult.trade) {
