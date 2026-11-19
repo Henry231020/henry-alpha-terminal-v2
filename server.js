@@ -15,6 +15,7 @@ const { parseTradeMessage } = require('./lib/trade-message');
 const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
 const { AlertStore } = require('./lib/alert-store');
+const { AlertThrottle } = require('./lib/alert-throttle');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -28,7 +29,7 @@ let solUsdPrice = null;
 let solUsdCheckedAt = 0;
 let solUsdRequest = null;
 let tradeFeedStatus = 'waiting for API key';
-const alertedPressure = new Map();
+const alertThrottle = new AlertThrottle({ cooldownMs: 30000, retentionMs: 10 * 60 * 1000, maxEntries: 5000 });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -243,16 +244,7 @@ function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   // Cool down each mint/signal pair independently: a BUY alert must not suppress
   // a later SELL warning for the same token.
   const key = mint + ':' + signal;
-  const previous = alertedPressure.get(key);
-  if (previous && (timestamp < previous || timestamp - previous <= ALERT_COOLDOWN_MS)) return false;
-  alertedPressure.set(key, timestamp);
-  if (alertedPressure.size > 5000) {
-    const cutoff = timestamp - 10 * 60 * 1000;
-    for (const [entryKey, lastAt] of alertedPressure) {
-      if (lastAt < cutoff) alertedPressure.delete(entryKey);
-      if (alertedPressure.size <= 4000) break;
-    }
-  }
+  if (!alertThrottle.shouldAllow(key, timestamp)) return false;
   const alert = { mint, signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
   alertStore.record(alert);
   persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
