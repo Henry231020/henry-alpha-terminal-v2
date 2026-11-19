@@ -14,6 +14,7 @@ const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
 const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
+const { AlertStore } = require('./lib/alert-store');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -21,6 +22,7 @@ const marketCache = new MarketCache({ ttlMs: 20000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
 const walletIntelligence = new WalletIntelligence();
 const tradeLearning = new TradeLearningEngine();
+const alertStore = new AlertStore({ maxAlerts: 500 });
 let tradeSubscriptions = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
@@ -261,9 +263,10 @@ function recordTradeAtPrice(item, price) {
   const previous = alertedPressure.get(mint);
   if (isAlertSignal && (!previous || timestamp - previous > ALERT_COOLDOWN_MS)) {
     alertedPressure.set(mint, timestamp);
-    const alert = { signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
+    const alert = { mint, signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
+    alertStore.record(alert);
     persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
-    broadcast({ type: 'pressure-alert', mint, ...alert });
+    broadcast({ type: 'pressure-alert', ...alert });
   }
   broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
@@ -579,6 +582,11 @@ const server = http.createServer(async (req, res) => {
     };
     persistence.save(mint, 'risk', checkedAt, savedRisk).catch(() => {});
     return sendJson(res, 200, { mint, risk, rugcheck, checkedAt: new Date(checkedAt).toISOString(), analysis: pressureStore.analyse(mint), automaticTrading: false });
+  }
+
+  if (url.pathname === '/api/alerts/recent') {
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 20)));
+    return sendJson(res, 200, { count: alertStore.recent(limit).length, alerts: alertStore.recent(limit), persistence: persistence.status(), automaticTrading: false });
   }
 
   if (url.pathname === '/api/alerts') {
