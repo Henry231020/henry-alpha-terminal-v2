@@ -83,3 +83,14 @@ test('holder scan remains unknown when pagination limit is reached', async () =>
   assert.equal(result.top10ConcentrationPct, null);
   assert.match(result.reason, /page limit/);
 });
+
+test('null or empty holder balances fail closed instead of counting as zero', async () => {
+  const client = createHeliusRiskClient({
+    apiKey: 'test',
+    fetchImpl: async () => ({ ok: true, json: async () => ({ result: { token_accounts: [{ owner: 'wallet-a', amount: null }] } }) })
+  });
+  const result = await client.getHolderRisk('So11111111111111111111111111111111111111112');
+  assert.equal(result.status, 'unknown');
+  assert.equal(result.top10ConcentrationPct, null);
+  assert.match(result.reason, /Incomplete owner or balance data/);
+});
