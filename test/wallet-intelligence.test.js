@@ -52,3 +52,17 @@ test('enforces a global wallet-token pair memory cap across tokens',()=>{
   assert.equal(x.byMint.get('mint-b').wallets.size,1);
   assert.equal(x.byMint.get('mint-c').wallets.size,1);
 });
+
+
+test('bounds burst-event history globally across token mints',()=>{
+  let now=10000000;
+  const x=new WalletIntelligence({clock:()=>now,maxBurstEvents:2});
+  const first=new Date(now-1000).toISOString();
+  x.recordTrade('mint-a',{wallet:'wallet-a',side:'buy',timestamp:now-300,usdValue:1},first);
+  x.recordTrade('mint-b',{wallet:'wallet-b',side:'buy',timestamp:now-200,usdValue:1},first);
+  x.recordTrade('mint-c',{wallet:'wallet-c',side:'buy',timestamp:now-100,usdValue:1},first);
+  assert.equal(x.burstOrder.length,2);
+  assert.equal(x.byMint.get('mint-a').burst.length,0);
+  assert.equal(x.byMint.get('mint-b').burst.length,1);
+  assert.equal(x.byMint.get('mint-c').burst.length,1);
+});
