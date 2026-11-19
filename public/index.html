@@ -277,9 +277,11 @@ async function selectToken(mint){
   $('detail').innerHTML='<div class="empty">Loading token market data…</div>';
   try{
     const result=await api('/api/token/'+encodeURIComponent(mint));
+    if(state.selectedMint!==mint)return;
     renderDetail(result.token,result.recentEvents||[],result.dataNotes||{});
     try {
       const pressure = await api('/api/pressure?mint='+encodeURIComponent(mint));
+      if(state.selectedMint!==mint)return;
       const panel = $('pressurePanel');
       if(panel) {
         const a = pressure.analysis || {};
@@ -305,6 +307,7 @@ async function selectToken(mint){
     } catch (_) {}
     try {
       const saved = await api('/api/alerts?mint='+encodeURIComponent(mint)+'&limit=10');
+      if(state.selectedMint!==mint)return;
       const panel = $('pressurePanel');
       if(panel) {
         const history = saved.alerts || [];
@@ -315,6 +318,7 @@ async function selectToken(mint){
     try {
       state.riskLoadingByMint[mint]=true;
       const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
+      if(state.selectedMint!==mint)return;
       state.riskByMint[mint]=riskResult;
       state.riskLoadingByMint[mint]=false;
       const panel = $('pressurePanel');
@@ -327,6 +331,7 @@ async function selectToken(mint){
     }
 
   }catch(e){
+    if(state.selectedMint!==mint)return;
     const t=state.tokens.find(x=>x.mint===mint);
     renderDetail(t,[]);
   }
