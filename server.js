@@ -694,7 +694,6 @@ const server = http.createServer(async (req, res) => {
   if (match) {
     const mint = decodeURIComponent(match[1]);
     const token = tokens.get(mint);
-    subscribeMintTrades(mint);
 
     if (!token) {
       return sendJson(res, 404, {
@@ -703,6 +702,7 @@ const server = http.createServer(async (req, res) => {
         mint
       });
     }
+    subscribeMintTrades(mint);
 
     try {
       const market = await fetchDexPairs(mint);
