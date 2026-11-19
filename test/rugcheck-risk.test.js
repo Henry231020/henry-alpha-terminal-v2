@@ -62,3 +62,11 @@ test('caches successful reports and preserves their original observation time', 
   assert.equal(cached.cached, true);
   assert.equal(cached.checkedAt, 1000);
 });
+
+test('explicit null score and insider counts never become zero-risk evidence', async () => {
+  const incomplete = report({ score_normalised: null, graphInsidersDetected: null });
+  const client = createRugCheckRiskClient({ fetchImpl: async () => ({ ok: true, json: async () => incomplete }) });
+  const result = await client.getTokenRisk('So11111111111111111111111111111111111111112');
+  assert.equal(result.status, 'unknown');
+  assert.equal(result.walletRisk, 'unknown');
+});
