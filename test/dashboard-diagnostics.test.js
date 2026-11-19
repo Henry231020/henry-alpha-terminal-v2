@@ -27,10 +27,11 @@ test('dashboard reads feed diagnostics from status endpoint without enabling tra
   assert.match(html, /No automatic real-money trading/);
 });
 
-test('token detail requests holder risk and labels incomplete results unverified', () => {
+test('token detail requests Helius and RugCheck risk and labels incomplete results unverified', () => {
   assert.match(html, /api\('\/api\/risk\/'\+encodeURIComponent\(mint\)\)/);
-  assert.match(html, /HOLDER CONCENTRATION CHECK/);
-  assert.match(html, /UNVERIFIED — do not treat as safe/);
-  assert.match(html, /Wallet\/scam risk: <strong>UNKNOWN<\/strong>/);
+  assert.match(html, /TOKEN SECURITY & HOLDER RISK/);
+  assert.match(html, /RugCheck classification/);
+  assert.match(html, /wallet-risk gate remains closed/);
+  assert.match(html, /riskByMint\[mint\]=riskResult/);
   assert.match(html, /No automatic real-money trading/);
 });
