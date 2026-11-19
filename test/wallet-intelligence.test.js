@@ -61,7 +61,7 @@ test('bounds burst-event history globally across token mints',()=>{
   x.recordTrade('mint-a',{wallet:'wallet-a',side:'buy',timestamp:now-300,usdValue:1},first);
   x.recordTrade('mint-b',{wallet:'wallet-b',side:'buy',timestamp:now-200,usdValue:1},first);
   x.recordTrade('mint-c',{wallet:'wallet-c',side:'buy',timestamp:now-100,usdValue:1},first);
-  assert.equal(x.burstOrder.length,2);
+  assert.equal(x.burstOrder.length - x.burstHead,2);
   assert.equal(x.byMint.get('mint-a').burst.length,0);
   assert.equal(x.byMint.get('mint-b').burst.length,1);
   assert.equal(x.byMint.get('mint-c').burst.length,1);
