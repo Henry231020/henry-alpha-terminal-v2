@@ -1,0 +1,12 @@
+{
+  "name": "GMGN Remote Desktop",
+  "build": { "dockerfile": "Dockerfile" },
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "6080": {
+      "label": "GMGN Remote Desktop",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postStartCommand": "bash .devcontainer/start-desktop.sh"
+}
