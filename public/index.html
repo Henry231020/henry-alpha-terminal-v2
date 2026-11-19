@@ -255,7 +255,7 @@ async function selectToken(mint){
         const wi = pressure.walletIntelligence || {};
         panel.innerHTML += '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>' +
           'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers (first 5 min): '+escapeHtml(number(wi.earlyBuyers||0))+' · Early buyers seen across multiple tokens: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>' +
-          (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong><br>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.<br>') +
+          (wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong><br>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.<br>') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.<br>') +
           '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span>' +
           (wi.wallets&&wi.wallets.length ? '<div class="muted" style="margin-top:6px">First observed early buyers: '+wi.wallets.slice(0,5).map(x=>escapeHtml(shortMint(x.wallet))+' ('+escapeHtml(number(x.tokensSeen))+' tokens seen)').join(' · ')+'</div>' : '');
       }
@@ -321,7 +321,25 @@ async function refreshAll(){
     renderTokens();renderEvents();
     if(state.selectedMint){
       const current=state.tokens.find(t=>t.mint===state.selectedMint);
-      if(current)renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
+      if(current){
+        renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
+        // Keep the selected token's live decision panel visible after the 15-second dashboard refresh.
+        api('/api/pressure?mint='+encodeURIComponent(state.selectedMint)).then(result=>{
+          const panel=$('pressurePanel'); if(!panel || state.selectedMint!==current.mint) return;
+          const a=result.analysis||{}, d=a.tradeDecision||{}, ind=a.indicators||{}, m=a.metrics||{}, wi=result.walletIntelligence||{};
+          const burstText=wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.';
+          panel.innerHTML='<strong>TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>'+
+            '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>'+
+            'Price history: '+escapeHtml(number(ind.observations||0))+' observations · '+(ind.ready?'indicators ready':'building indicator history')+' · '+(ind.priceFresh?'price fresh':'price stale')+'<br>'+
+            '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>'+
+            '<strong>Entry/exit reasoning:</strong> '+escapeHtml((d.reasons||[]).join(' '))+'<br>'+
+            '<strong>Risk gates:</strong> liquidity '+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+' · concentration '+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+' · wallet '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>'+
+            '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>'+
+            'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers: '+escapeHtml(number(wi.earlyBuyers||0))+' · Repeat early buyers: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>'+burstText+'<br>'+
+            '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span><br>'+
+            '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
+        }).catch(()=>{});
+      }
     }
     if(!state.connected)setConnection('Server reachable · live feed pending',false);
   }catch(e){setConnection('Server unavailable · retrying',false);}
