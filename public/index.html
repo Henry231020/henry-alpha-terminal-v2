@@ -329,9 +329,15 @@ async function refreshAll(){
       if(current){
         renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
         // Keep the selected token's live decision panel visible after the 15-second dashboard refresh.
-        api('/api/pressure?mint='+encodeURIComponent(state.selectedMint)).then(result=>{
-          const panel=$('pressurePanel'); if(!panel || state.selectedMint!==current.mint) return;
+        api('/api/token/'+encodeURIComponent(state.selectedMint)).then(tokenResult=>{
+          if(state.selectedMint!==current.mint) return null;
+          const fresh=tokenResult.token;
+          if(fresh){const index=state.tokens.findIndex(t=>t.mint===current.mint);if(index>=0)state.tokens[index]=fresh;renderTokens();renderDetail(fresh,state.events.filter(e=>(e.data||{}).mint===current.mint),tokenResult.dataNotes||{});}
+          return api('/api/pressure?mint='+encodeURIComponent(current.mint));
+        }).then(result=>{
+          const panel=$('pressurePanel'); if(!result || !panel || state.selectedMint!==current.mint) return;
           const a=result.analysis||{}, d=a.tradeDecision||{}, ind=a.indicators||{}, m=a.metrics||{}, wi=result.walletIntelligence||{};
+          state.pressureByMint[current.mint]=d;renderTokens();
           const burstText=wi.observedWallets>=5 ? (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.') : 'Insufficient wallet-labelled coverage to assess coordinated bursts.';
           panel.innerHTML='<strong>TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>'+
             '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>'+
