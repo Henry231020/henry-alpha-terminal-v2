@@ -582,8 +582,15 @@ const server = http.createServer(async (req, res) => {
       const holderConcentrationPct = risk.status === 'observed'
         ? risk.top10ConcentrationPct
         : null;
-      const riskObservedAt = Number(rugcheck.checkedAt);
-      const checkedAt = rugcheck.status === 'observed' && Number.isFinite(riskObservedAt) ? Math.min(Date.now(), riskObservedAt) : Date.now();
+      const observedRiskTimes = [
+        risk.status === 'observed' ? Number(risk.checkedAt) : NaN,
+        rugcheck.status === 'observed' ? Number(rugcheck.checkedAt) : NaN
+      ].filter(value => Number.isFinite(value) && value <= Date.now() + 5000);
+      // Use the older source timestamp so cached provider data cannot make
+      // the combined risk assessment appear fresher than its oldest input.
+      const checkedAt = observedRiskTimes.length
+        ? Math.min(...observedRiskTimes, Date.now())
+        : Date.now();
       pressureStore.updateHolderRisk(mint, {
         holderConcentrationPct,
         walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
