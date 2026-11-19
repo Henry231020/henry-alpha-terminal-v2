@@ -35,3 +35,20 @@ test('bearish EMA alignment produces a sell/exit warning', () => {
   assert.equal(result.tradeDecision.action, 'SELL / EXIT WARNING');
   assert.equal(result.automaticTrading, false);
 });
+
+test('confirmed buy setup includes reference entry, stop and 0.5x/1x profit targets', () => {
+  const prices = [1];
+  const increments = [0.001, 0.001, -0.0005, -0.0005];
+  for (let i = 0; i < 59; i++) prices.push(prices[prices.length - 1] + increments[i % increments.length]);
+  const snapshots = prices.map((priceUsd, i) => ({ timestamp: now - (59 - i) * 30000, priceUsd }));
+  const trades = [
+    ...Array.from({ length: 4 }, (_, i) => ({ side: 'buy', usdValue: 100, timestamp: now - 240000 + i * 1000 })),
+    ...Array.from({ length: 10 }, (_, i) => ({ side: 'buy', usdValue: 150, timestamp: now - 50000 + i * 100 }))
+  ];
+  const result = analysePressure({ trades, snapshots, now, liquidityUsd: 20000, holderConcentrationPct: 20, walletRisk: 'low' });
+  assert.equal(result.tradeDecision.action, 'BUY SETUP');
+  assert.ok(result.tradePlan.referenceEntryPrice > 0);
+  assert.ok(result.tradePlan.stopLossPrice < result.tradePlan.referenceEntryPrice);
+  assert.ok(result.tradePlan.takeProfit1Price > result.tradePlan.referenceEntryPrice);
+  assert.ok(result.tradePlan.takeProfit2Price > result.tradePlan.takeProfit1Price);
+});
