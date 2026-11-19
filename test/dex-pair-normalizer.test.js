@@ -77,6 +77,13 @@ test('keeps explicitly missing transaction and price-change metrics unknown', ()
   assert.equal(market.buys24h, null);
   assert.equal(market.sells24h, null);
   assert.equal(market.priceChange24h, null);
+  const quoteSide = normalisePairForMint({
+    ...base,
+    baseToken: { address: 'other' },
+    quoteToken: { address: mint },
+    priceChange: { h24: null }
+  }, mint);
+  assert.equal(quoteSide.priceChange24h, null);
 });
 
 test('preserves measured zero liquidity and volume while keeping absent counts unknown', () => {
