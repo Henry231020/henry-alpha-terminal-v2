@@ -7,8 +7,8 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 - Discovers new PumpPortal token and migration events.
 - Subscribes to live token trades when `PUMPPORTAL_API_KEY` is configured.
 - Retrieves market snapshots from DexScreener with caching and rate-limit backoff.
-- Tracks observed buy/sell pressure, trade acceleration, liquidity and holder concentration.
-- Calculates EMA 9/20/50 and RSI 14 from distinct, timestamped price observations.
+- Tracks observed buy/sell pressure, trade acceleration, liquidity and holder concentration, with urgent sell-pressure warnings that do not wait for EMA warm-up.
+- Calculates EMA 9/20/50 and standard Wilder-smoothed RSI 14 from distinct, timestamped price observations.
 - Produces `BUY SETUP`, `WATCHLIST — RISK UNVERIFIED`, `SELL / EXIT WARNING` or `WAIT` decisions with reasons.
 - Tracks early observed buyers, repeat wallets across tokens and short-window wallet bursts. These are review signals, not proof of coordination.
 - Uses Helius holder-account data when configured and RugCheck token reports for authority, risk-score and insider-network checks. Risk evidence expires after five minutes and is refreshed while a token remains selected.
