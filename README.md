@@ -5,7 +5,7 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 ## What it does
 
 - Discovers new PumpPortal token and migration events.
-- Subscribes to live token trades when `PUMPPORTAL_API_KEY` is configured.
+- Subscribes to live token trades when `PUMPPORTAL_API_KEY` is configured, rotating the 100 subscription slots toward newly discovered or selected tokens.
 - Retrieves market snapshots from DexScreener with caching and rate-limit backoff.
 - Tracks observed buy/sell pressure, trade acceleration, liquidity and holder concentration, with urgent sell-pressure warnings that do not wait for EMA warm-up.
 - Calculates EMA 9/20/50 and standard Wilder-smoothed RSI 14 from distinct, timestamped price observations.
