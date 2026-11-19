@@ -148,7 +148,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const state={tokens:[],events:[],pressureAlerts:[],pressureByMint:{},riskByMint:{},riskLoadingByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
+const state={tokens:[],events:[],pressureAlerts:[],pressureByMint:{},riskByMint:{},riskLoadingByMint:{},riskRetryAtByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
 const money=n=>{
   if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
   n=Number(n);
@@ -318,14 +318,16 @@ async function selectToken(mint){
     try {
       state.riskLoadingByMint[mint]=true;
       const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
+      state.riskLoadingByMint[mint]=false;
+      delete state.riskRetryAtByMint[mint];
       if(state.selectedMint!==mint)return;
       state.riskByMint[mint]=riskResult;
-      state.riskLoadingByMint[mint]=false;
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
       state.riskLoadingByMint[mint]=false;
-      state.riskByMint[mint]={checkedAt:new Date().toISOString(),risk:{status:'unknown'},rugcheck:{status:'unknown'}};
+      state.riskRetryAtByMint[mint]=Date.now()+30000;
+      state.riskByMint[mint]={checkedAt:null,risk:{status:'unknown'},rugcheck:{status:'unknown'}};
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(null);
     }
@@ -377,12 +379,13 @@ const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[
       if(current){
         renderDetail(current,state.events.filter(e=>(e.data||{}).mint===state.selectedMint));
         const cachedRisk=state.riskByMint[current.mint], riskAge=cachedRisk?.checkedAt?Date.now()-Date.parse(cachedRisk.checkedAt):Infinity;
-        if(riskAge>5*60*1000&&!state.riskLoadingByMint[current.mint]){
+        if(riskAge>5*60*1000&&Date.now()>=(state.riskRetryAtByMint[current.mint]||0)&&!state.riskLoadingByMint[current.mint]){
           state.riskLoadingByMint[current.mint]=true;
           api('/api/risk/'+encodeURIComponent(current.mint)).then(riskResult=>{
             state.riskByMint[current.mint]=riskResult;
+            delete state.riskRetryAtByMint[current.mint];
             const panel=$('pressurePanel');if(panel&&state.selectedMint===current.mint)panel.innerHTML+=riskMarkup(riskResult);
-          }).catch(()=>{state.riskByMint[current.mint]={checkedAt:new Date().toISOString(),risk:{status:'unknown'},rugcheck:{status:'unknown'}};}).finally(()=>{state.riskLoadingByMint[current.mint]=false;});
+          }).catch(()=>{state.riskByMint[current.mint]={checkedAt:null,risk:{status:'unknown'},rugcheck:{status:'unknown'}};state.riskRetryAtByMint[current.mint]=Date.now()+30000;}).finally(()=>{state.riskLoadingByMint[current.mint]=false;});
         }
         // Keep the selected token's live decision panel visible after the 15-second dashboard refresh.
         api('/api/token/'+encodeURIComponent(state.selectedMint)).then(tokenResult=>{
