@@ -456,7 +456,7 @@ function connectPumpPortal() {
     tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
     tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
     if (process.env.PUMPPORTAL_API_KEY) {
-      for (const mint of tokens.keys()) tradeSubscriptions.subscribe(mint);
+      for (const mint of [...tokens.keys()].reverse()) tradeSubscriptions.subscribeLatest(mint);
     }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
