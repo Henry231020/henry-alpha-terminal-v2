@@ -90,3 +90,22 @@ test('urgent accelerating sell pressure warns to exit before EMA history is read
   assert.equal(result.tradeDecision.action, 'SELL / EXIT WARNING');
   assert.match(result.tradeDecision.reasons.join(' '), /Accelerating sell pressure/);
 });
+
+
+test('does not produce a BUY setup when the observed price trend is negative despite bullish short EMAs', () => {
+  const prices = [2, ...Array(40).fill(1)];
+  const increments = [0.01, 0.02, -0.005, -0.005];
+  for (let i = 0; i < 19; i++) prices.push(prices[prices.length - 1] + increments[i % increments.length]);
+  const snapshots = prices.map((priceUsd, i) => ({ timestamp: now - (59 - i) * 30000, priceUsd }));
+  const trades = [
+    ...Array.from({ length: 4 }, (_, i) => ({ side: 'buy', usdValue: 100, timestamp: now - 240000 + i * 1000 })),
+    ...Array.from({ length: 10 }, (_, i) => ({ side: 'buy', usdValue: 150, timestamp: now - 50000 + i * 100 }))
+  ];
+  const result = analysePressure({ trades, snapshots, now, liquidityUsd: 20000, holderConcentrationPct: 20, walletRisk: 'low' });
+  assert.ok(result.indicators.ema9 > result.indicators.ema20);
+  assert.ok(result.indicators.ema20 > result.indicators.ema50);
+  assert.ok(result.indicators.rsi14 >= 50 && result.indicators.rsi14 <= 72);
+  assert.ok(result.metrics.observedPriceChangePct < 0);
+  assert.equal(result.tradeDecision.action, 'WAIT');
+  assert.match(result.tradeDecision.reasons.join(' '), /price change is not positive/);
+});
