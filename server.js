@@ -515,7 +515,12 @@ function connectPumpPortal() {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // The dashboard and API are same-origin; do not grant arbitrary websites
+  // cross-origin access to live market and account-adjacent diagnostics.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   const url = new URL(
     req.url,
