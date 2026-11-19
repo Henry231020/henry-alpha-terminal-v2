@@ -63,3 +63,14 @@ test('reports descriptive RSI-band outcomes without changing strategy rules', ()
   assert.equal(summary.conditionStats['entry RSI 60-69'].trades, 1);
   assert.match(summary.learningNote, /fewer than 20/);
 });
+
+test('restoring a closed paper trade clears its earlier persisted open entry',()=>{
+ const engine=new TradeLearningEngine();
+ const entry={mint:'mint-restore',entryAt:1000,entryPrice:1,status:'paper entry opened',entryConditions:{rsi14:60}};
+ const closed={...entry,exitAt:2000,exitPrice:1.5,pnlPct:50,outcome:'WIN',status:'closed paper trade'};
+ assert.equal(engine.restoreTrade(entry),true);
+ assert.equal(engine.summary().openPaperPositions,1);
+ assert.equal(engine.restoreTrade(closed),true);
+ assert.equal(engine.summary().openPaperPositions,0);
+ assert.equal(engine.summary().closedTrades,1);
+});
