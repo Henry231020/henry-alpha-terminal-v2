@@ -20,6 +20,7 @@ const { newestTokenMints } = require('./lib/token-priority');
 const { RiskRequestGuard } = require('./lib/risk-request-guard');
 const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuation');
 const { isSafeMetadataUrl } = require('./lib/safe-metadata-url');
+const { boundedInteger } = require('./lib/query-limits');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -636,7 +637,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/alerts/recent') {
-    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 20)));
+    const limit = boundedInteger(url.searchParams.get('limit'), { fallback: 20, min: 1, max: 100 });
     const persisted = await persistence.recentAlertsAll(limit);
     const saved = persisted.map(row => ({ mint: row.mint, observedAt: row.observed_at, ...(row.payload || {}) }));
     const combined = [...alertStore.recent(limit), ...saved]
@@ -654,7 +655,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/alerts') {
     const mint = url.searchParams.get('mint');
     if (!mint) return sendJson(res, 400, { error: 'mint query parameter required' });
-    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 25)));
+    const limit = boundedInteger(url.searchParams.get('limit'), { fallback: 25, min: 1, max: 100 });
     const rows = await persistence.recentAlerts(mint, limit);
     const persisted = rows.map(row => ({
       mint,
@@ -674,7 +675,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/learning') {
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+    const limit = boundedInteger(url.searchParams.get('limit'), { fallback: 50, min: 1, max: 200 });
     return sendJson(res, 200, { ...tradeLearning.summary(limit), persistence: persistence.status() });
   }
 
@@ -688,7 +689,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/pressure') {
     const mint = url.searchParams.get('mint');
     if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), walletIntelligence: walletIntelligence.analyse(mint, tokens.get(mint)?.firstSeenAt), store: pressureStore.getStats() });
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    const limit = boundedInteger(url.searchParams.get('limit'), { fallback: 100, min: 1, max: 200 });
     const pressure = [...tokens.values()]
       .sort((a, b) => Date.parse(b.lastEventAt || b.firstSeenAt || 0) - Date.parse(a.lastEventAt || a.firstSeenAt || 0))
       .slice(0, limit)
@@ -741,7 +742,7 @@ const server = http.createServer(async (req, res) => {
     const sort = url.searchParams.get('sort') || 'newest';
     const limit = Math.min(
       200,
-      Math.max(1, Number(url.searchParams.get('limit') || 100))
+      boundedInteger(url.searchParams.get('limit'), { fallback: 100, min: 1, max: 200 })
     );
 
     let list = [...tokens.values()].filter(token =>
