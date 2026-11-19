@@ -28,5 +28,5 @@ test('selected-token route fails closed for unknown tokens', () => {
 });
 
 test('does not register a second unreachable token detail route', () => {
-  assert.equal((serverSource.match(/url\.pathname\.match\(\^\\\\\/api\\\\\/token/g) || []).length, 0);
+  assert.equal((serverSource.match(/url\.pathname\.match\(/g) || []).length, 0);
 });
