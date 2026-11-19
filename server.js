@@ -562,19 +562,21 @@ const server = http.createServer(async (req, res) => {
     const holderConcentrationPct = risk.status === 'observed'
       ? risk.top10ConcentrationPct
       : current.metrics?.holderConcentrationPct ?? null;
+    const checkedAt = Date.now();
     pressureStore.updateHolderRisk(mint, {
       holderConcentrationPct,
-      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown'
+      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
+      checkedAt
     });
     const savedRisk = {
       holderConcentrationPct,
       walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
-      checkedAt: Date.now(),
+      checkedAt,
       helius: risk,
       rugcheck
     };
-    persistence.save(mint, 'risk', Date.now(), savedRisk).catch(() => {});
-    return sendJson(res, 200, { mint, risk, rugcheck, analysis: pressureStore.analyse(mint), automaticTrading: false });
+    persistence.save(mint, 'risk', checkedAt, savedRisk).catch(() => {});
+    return sendJson(res, 200, { mint, risk, rugcheck, checkedAt: new Date(checkedAt).toISOString(), analysis: pressureStore.analyse(mint), automaticTrading: false });
   }
 
   if (url.pathname === '/api/alerts') {
