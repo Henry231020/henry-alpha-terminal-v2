@@ -111,6 +111,9 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
     <input id="search" placeholder="Search name, symbol or token mint…" autocomplete="off">
     <select id="sort">
       <option value="newest">Newest activity</option>
+      <option value="buy">BUY setups first</option>
+      <option value="sell">SELL warnings first</option>
+      <option value="watchlist">Risk-unverified watchlist first</option>
       <option value="liquidity">Highest liquidity</option>
       <option value="volume">Highest 24h volume</option>
       <option value="marketcap">Highest market cap</option>
@@ -187,6 +190,16 @@ function filteredTokens(){
   const list=state.tokens.filter(t=>!q||[t.name,t.symbol,t.mint].some(v=>String(v||'').toLowerCase().includes(q)));
   const sort=$('sort').value;
   list.sort((a,b)=>{
+    if(['buy','sell','watchlist'].includes(sort)){
+      const rank = action => {
+        if(sort==='buy') return action==='BUY SETUP'?0:action==='WATCHLIST — RISK UNVERIFIED'?1:action==='SELL / EXIT WARNING'?3:2;
+        if(sort==='sell') return action==='SELL / EXIT WARNING'?0:action==='BUY SETUP'?3:1;
+        return action==='WATCHLIST — RISK UNVERIFIED'?0:action==='BUY SETUP'?1:action==='SELL / EXIT WARNING'?3:2;
+      };
+      const diff=rank(state.pressureByMint[a.mint]?.action||'WAIT')-rank(state.pressureByMint[b.mint]?.action||'WAIT');
+      if(diff)return diff;
+      return Date.parse(b.lastEventAt||b.firstSeenAt||0)-Date.parse(a.lastEventAt||a.firstSeenAt||0);
+    }
     if(sort==='liquidity')return (b.liquidityUsd||0)-(a.liquidityUsd||0);
     if(sort==='volume')return (b.volume24h||0)-(a.volume24h||0);
     if(sort==='marketcap')return (b.marketCapUsd||0)-(a.marketCapUsd||0);
