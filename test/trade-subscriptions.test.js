@@ -47,7 +47,7 @@ test('socket send failures do not corrupt subscription bookkeeping',()=>{
   ws.send=()=>{throw new Error('socket closed during send');};
   assert.equal(manager.subscribe('mint-a'),false);
   assert.equal(manager.stats().subscribedMints,0);
-  ws.send=socket().send.bind(socket());
+  ws.send=function(value){this.sent.push(JSON.parse(value));};
   assert.equal(manager.subscribe('mint-a'),true);
   ws.send=()=>{throw new Error('socket closed during unsubscribe');};
   assert.equal(manager.unsubscribe('mint-a'),false);
