@@ -374,16 +374,16 @@ async function refreshOneToken(mint) {
     tokens.set(mint, merged);
     if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
       const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
-      pressureStore.recordSnapshot(mint, snapshot);
-      persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
-    }
-    pressureStore.updateLiquidity(mint, merged.liquidityUsd);
-    if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
-      const analysis = pressureStore.analyse(mint);
-      const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: Date.now() });
-      if (learningResult.trade) {
-        persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
-        broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
+      const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
+      if (snapshotRecorded) persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
+      if (snapshotRecorded) {
+        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+        const analysis = pressureStore.analyse(mint);
+        const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: snapshot.timestamp });
+        if (learningResult.trade) {
+          persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
+          broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
+        }
       }
     }
     broadcast({ type: 'market-update', token: merged });
@@ -689,18 +689,17 @@ const server = http.createServer(async (req, res) => {
         tokens.set(mint, merged);
         if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
           const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
-          pressureStore.recordSnapshot(mint, snapshot);
-          persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
-        }
-        pressureStore.updateLiquidity(mint, merged.liquidityUsd);
-        if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
-          const analysis = pressureStore.analyse(mint);
-          const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: Date.now() });
-          if (learningResult.trade) {
-            persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
-            broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
+          const snapshotRecorded = pressureStore.recordSnapshot(mint, snapshot);
+          if (snapshotRecorded) persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
+          if (snapshotRecorded) {
+            pressureStore.updateLiquidity(mint, merged.liquidityUsd);
+            const analysis = pressureStore.analyse(mint);
+            const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: snapshot.timestamp });
+            if (learningResult.trade) {
+              persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
+              broadcast({ type: 'paper-trade-update', mint, trade: learningResult.trade, learning: tradeLearning.summary(20) });
+            }
           }
-        }
 
         return sendJson(res, 200, {
           token: merged,
