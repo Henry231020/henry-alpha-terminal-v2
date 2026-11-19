@@ -8,12 +8,14 @@ const { MarketCache } = require('./lib/market-cache');
 const { PressureStore } = require('./lib/pressure-store');
 const { TradeSubscriptionManager } = require('./lib/trade-subscriptions');
 const { createHeliusRiskClient } = require('./lib/helius-risk');
+const { createRugCheckRiskClient } = require('./lib/rugcheck-risk');
 const { createPressurePersistence } = require('./lib/pressure-persistence');
 const { createFeedDiagnostics } = require('./lib/feed-diagnostics');
 const { parseTradeMessage } = require('./lib/trade-message');
 const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
 const heliusRisk = createHeliusRiskClient();
+const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
 const marketCache = new MarketCache({ ttlMs: 20000, maxEntries: 1000 });
 const pressureStore = new PressureStore();
@@ -538,6 +540,7 @@ const server = http.createServer(async (req, res) => {
       tradeFeed: tradeFeedStatus,
       feedDiagnostics: feedDiagnostics.snapshot(),
       heliusRisk: process.env.HELIUS_API_KEY ? 'configured; queried per token on request' : 'not configured',
+      rugCheckRisk: 'public token report queried on token selection; optional RUGCHECK_API_KEY supported',
       persistence: persistence.status(),
       tradeLearning: tradeLearning.summary(10),
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
@@ -551,15 +554,26 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/risk/')) {
     const mint = decodeURIComponent(url.pathname.slice('/api/risk/'.length));
     if (!mint) return sendJson(res, 400, { error: 'mint required' });
-    const risk = await heliusRisk.getHolderRisk(mint);
-    if (risk.status === 'observed') {
-      pressureStore.updateHolderRisk(mint, {
-        holderConcentrationPct: risk.top10ConcentrationPct,
-        walletRisk: 'unknown'
-      });
-      persistence.save(mint, 'risk', Date.now(), risk).catch(() => {});
-    }
-    return sendJson(res, 200, { mint, risk, automaticTrading: false });
+    const [risk, rugcheck] = await Promise.all([
+      heliusRisk.getHolderRisk(mint),
+      rugCheckRisk.getTokenRisk(mint)
+    ]);
+    const current = pressureStore.analyse(mint);
+    const holderConcentrationPct = risk.status === 'observed'
+      ? risk.top10ConcentrationPct
+      : current.metrics?.holderConcentrationPct ?? null;
+    pressureStore.updateHolderRisk(mint, {
+      holderConcentrationPct,
+      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown'
+    });
+    const savedRisk = {
+      holderConcentrationPct,
+      walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
+      helius: risk,
+      rugcheck
+    };
+    persistence.save(mint, 'risk', Date.now(), savedRisk).catch(() => {});
+    return sendJson(res, 200, { mint, risk, rugcheck, analysis: pressureStore.analyse(mint), automaticTrading: false });
   }
 
   if (url.pathname === '/api/alerts') {
