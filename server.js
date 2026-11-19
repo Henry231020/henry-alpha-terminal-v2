@@ -238,7 +238,6 @@ function subscribeMintTrades(mint) {
 
 const pendingTrades = [];
 const MAX_PENDING_TRADES = 500;
-const ALERT_COOLDOWN_MS = 30000;
 
 function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
   // Cool down each mint/signal pair independently: a BUY alert must not suppress
