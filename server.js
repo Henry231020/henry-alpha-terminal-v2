@@ -591,14 +591,17 @@ const server = http.createServer(async (req, res) => {
     const mint = url.searchParams.get('mint');
     if (mint) return sendJson(res, 200, { mint, analysis: pressureStore.analyse(mint), walletIntelligence: walletIntelligence.analyse(mint, tokens.get(mint)?.firstSeenAt), store: pressureStore.getStats() });
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 100)));
-    const pressure = [...tokens.values()].slice(0, limit).map(token => ({
-      mint: token.mint,
-      name: token.name,
-      symbol: token.symbol,
-      priceUsd: token.priceUsd,
-      liquidityUsd: token.liquidityUsd,
-      analysis: pressureStore.analyse(token.mint)
-    }));
+    const pressure = [...tokens.values()]
+      .sort((a, b) => Date.parse(b.lastEventAt || b.firstSeenAt || 0) - Date.parse(a.lastEventAt || a.firstSeenAt || 0))
+      .slice(0, limit)
+      .map(token => ({
+        mint: token.mint,
+        name: token.name,
+        symbol: token.symbol,
+        priceUsd: token.priceUsd,
+        liquidityUsd: token.liquidityUsd,
+        analysis: pressureStore.analyse(token.mint)
+      }));
     return sendJson(res, 200, { count: pressure.length, pressure, store: pressureStore.getStats(), automaticTrading: false, note: 'Signals are based only on observed trades and snapshots; missing wallet-risk data cannot pass buy gates.' });
   }
 
