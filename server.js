@@ -239,6 +239,27 @@ const pendingTrades = [];
 const MAX_PENDING_TRADES = 500;
 const ALERT_COOLDOWN_MS = 30000;
 
+function recordPressureAlert(mint, signal, analysis, timestamp = Date.now()) {
+  // Cool down each mint/signal pair independently: a BUY alert must not suppress
+  // a later SELL warning for the same token.
+  const key = mint + ':' + signal;
+  const previous = alertedPressure.get(key);
+  if (previous && (timestamp < previous || timestamp - previous <= ALERT_COOLDOWN_MS)) return false;
+  alertedPressure.set(key, timestamp);
+  if (alertedPressure.size > 5000) {
+    const cutoff = timestamp - 10 * 60 * 1000;
+    for (const [entryKey, lastAt] of alertedPressure) {
+      if (lastAt < cutoff) alertedPressure.delete(entryKey);
+      if (alertedPressure.size <= 4000) break;
+    }
+  }
+  const alert = { mint, signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
+  alertStore.record(alert);
+  persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
+  broadcast({ type: 'pressure-alert', ...alert });
+  return true;
+}
+
 function recordTradeAtPrice(item, price) {
   const { mint, side, solAmount, wallet, timestamp } = item;
   const usdValue = solAmount * price;
@@ -253,21 +274,8 @@ function recordTradeAtPrice(item, price) {
   walletIntelligence.recordTrade(mint, trade, tokenFirstSeenAt);
   persistence.save(mint, 'trade', timestamp, trade).catch(() => {});
   const analysis = pressureStore.analyse(mint);
-  if (alertedPressure.size > 5000) {
-    for (const [key, lastAt] of alertedPressure) {
-      if (timestamp - lastAt > 10 * 60 * 1000) alertedPressure.delete(key);
-      if (alertedPressure.size <= 4000) break;
-    }
-  }
   const isAlertSignal = ['URGENT DUMP PRESSURE', 'BUY PRESSURE CONFIRMED (ALERT ONLY)'].includes(analysis.signal);
-  const previous = alertedPressure.get(mint);
-  if (isAlertSignal && (!previous || timestamp - previous > ALERT_COOLDOWN_MS)) {
-    alertedPressure.set(mint, timestamp);
-    const alert = { mint, signal: analysis.signal, analysis, automaticTrading: false, receivedAt: new Date(timestamp).toISOString() };
-    alertStore.record(alert);
-    persistence.save(mint, 'alert', timestamp, alert).catch(() => {});
-    broadcast({ type: 'pressure-alert', ...alert });
-  }
+  if (isAlertSignal) recordPressureAlert(mint, analysis.signal, analysis, timestamp);
   broadcast({ type: 'trade-observation', mint, side, usdValue, receivedAt: new Date(timestamp).toISOString(), analysis });
 }
 
@@ -383,6 +391,10 @@ async function refreshOneToken(mint) {
       if (snapshotRecorded) {
         pressureStore.updateLiquidity(mint, merged.liquidityUsd);
         const analysis = pressureStore.analyse(mint);
+        const decisionAction = analysis.tradeDecision?.action;
+        if (decisionAction === 'BUY SETUP' || decisionAction === 'SELL / EXIT WARNING') {
+          recordPressureAlert(mint, decisionAction, analysis, snapshot.timestamp);
+        }
         const learningResult = tradeLearning.observe({ mint, analysis, priceUsd: merged.priceUsd, timestamp: snapshot.timestamp });
         if (learningResult.trade) {
           persistence.save(mint, 'paper_trade', learningResult.trade.exitAt || learningResult.trade.entryAt, learningResult.trade).catch(() => {});
