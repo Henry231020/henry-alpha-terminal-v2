@@ -21,3 +21,11 @@ test('does not emit an alert for WAIT or unrecognised decisions', () => {
   assert.equal(pressureAlertSignal({ signal: 'WAIT', tradeDecision: { action: 'WAIT' } }), null);
   assert.equal(pressureAlertSignal({ signal: 'unknown', tradeDecision: { action: 'WATCHLIST — RISK UNVERIFIED' } }), null);
 });
+
+test('trade observation broadcast uses the validated valuation object', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(server, /type: 'trade-observation',[^\n]*usdValue: trade\.usdValue/);
+  assert.doesNotMatch(server, /type: 'trade-observation',[^\n]*side, usdValue,/);
+});
