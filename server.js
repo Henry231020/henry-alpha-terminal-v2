@@ -16,7 +16,7 @@ const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
 const { AlertStore } = require('./lib/alert-store');
 const { AlertThrottle } = require('./lib/alert-throttle');
-const { newestTokenMints } = require('./lib/token-priority');
+const { newestTokenMints, prioritisedTokenMints } = require('./lib/token-priority');
 const { RiskRequestGuard } = require('./lib/risk-request-guard');
 const { valueTradeInUsd, MAX_TRADE_QUOTE_AGE_MS } = require('./lib/trade-valuation');
 const { isSafeMetadataUrl } = require('./lib/safe-metadata-url');
@@ -66,6 +66,9 @@ let dexHttpErrors = 0;
 let dexNetworkErrors = 0;
 let dexLastError = null;
 let refreshInProgress = false;
+const selectedTokenOrder = new Map();
+const MAX_SELECTED_TOKENS = 20;
+
 
 function sendJson(res, status, value) {
   res.writeHead(status, {
@@ -439,7 +442,7 @@ async function refreshMarketData() {
   try {
     // Prioritise first discovery time, not last activity: busy older tokens must not
     // keep newer launches out of the market-price warm-up window.
-    const list = newestTokenMints([...tokens.values()], 20);
+    const list = prioritisedTokenMints([...tokens.values()], [...selectedTokenOrder.keys()], 20);
 
     for (const mint of list) {
       await refreshOneToken(mint);
@@ -719,6 +722,11 @@ const server = http.createServer(async (req, res) => {
     const token = tokens.get(mint);
     if (!token) return sendJson(res, 404, { ok: false, error: 'Token not found in the current discovery session' });
 
+    // Keep recently selected tokens in the market refresh rotation so their indicators
+    // continue warming even when they fall outside the newest-launch window.
+    selectedTokenOrder.delete(mint);
+    selectedTokenOrder.set(mint, Date.now());
+    while (selectedTokenOrder.size > MAX_SELECTED_TOKENS) selectedTokenOrder.delete(selectedTokenOrder.keys().next().value);
     // Selecting a token promotes its live trade subscription and requests a fresh
     // market quote, even when it is outside the background scanner's newest-20 window.
     subscribeMintTrades(mint);
