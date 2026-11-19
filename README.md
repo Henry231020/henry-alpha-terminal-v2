@@ -65,3 +65,5 @@ API `limit` query parameters are parsed as bounded safe integers; missing or mal
 Dashboard wallet-activity counts distinguish missing observations from a measured zero; early-buyer counts remain `UNVERIFIED` when token first-seen coverage is unavailable. Trade-observation WebSocket updates use the validated USD valuation object. BUY SETUP and SELL / EXIT WARNING decisions are included in the saved and broadcast alert stream, alongside pressure-only alerts when full technical decisions are not ready. Burst-history eviction uses a queue cursor with periodic compaction to avoid repeated O(n) array shifts at high event rates.
 
 The live-feed diagnostics panel also shows stale SOL/USD valuations rejected, current SOL/USD quote age, and the next provider retry time when a cooldown is active.
+
+The background DexScreener refresh rotation reserves up to 20 slots for recently selected dashboard tokens before filling remaining slots with newest discoveries. This keeps an older token the user is actively inspecting receiving recurring market snapshots and allows its EMA/RSI history to continue warming.
