@@ -777,7 +777,12 @@ server.listen(PORT, HOST, () => {
           rows.reverse();
           for (const row of rows) {
             if (row.kind === 'paper_trade') { if (tradeLearning.restoreTrade(row.payload)) restored++; }
-            else if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) restored++;
+            else if (pressureStore.restoreObservation(mint, row.kind, row.observed_at, row.payload)) {
+              if (row.kind === 'trade' && row.payload && typeof row.payload.wallet === 'string') {
+                walletIntelligence.recordTrade(mint, { ...row.payload, timestamp: Number(row.payload.timestamp ?? new Date(row.observed_at).getTime()) }, tokens.get(mint)?.firstSeenAt);
+              }
+              restored++;
+            }
           }
         }
         console.log('Pressure persistence recovery:', { mints: mints.length, restored });
