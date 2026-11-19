@@ -69,3 +69,18 @@ The live-feed diagnostics panel also shows stale SOL/USD valuations rejected, cu
 The background DexScreener refresh rotation reserves up to 20 slots for recently selected dashboard tokens before filling remaining slots with newest discoveries. This keeps an older token the user is actively inspecting receiving recurring market snapshots and allows its EMA/RSI history to continue warming.
 
 After the selected token's Helius and RugCheck checks finish, the detail panel immediately refreshes the BUY/SELL decision, reasoning and risk-gate states from that verified scan instead of leaving the pre-scan unknown-risk result visible.
+
+## Live Codespace verification
+
+Use this checklist after starting the existing Codespace. It verifies the feed without placing trades:
+
+1. Open the dashboard and confirm the service health endpoint returns `ok: true`:
+   `curl -fsS http://localhost:3000/health`
+2. Inspect provider and feed state:
+   `curl -fsS http://localhost:3000/api/status`
+3. Confirm `pumpPortal` is `connected`, `tradeFeed` is enabled, and `tradeSubscriptions.subscribedMints` increases after tokens are discovered or selected. A connected discovery socket alone does not prove token-trade subscriptions are active.
+4. Leave the dashboard open while trades arrive. `feedDiagnostics.messagesReceived` should increase; valid trade messages should increase `validTradeMessages`; successfully valued and accepted trades should increase `recordedTrades`. If these counters diverge, inspect `lastRejectedReason`, `lastProcessingIssue`, `priceUnavailable`, `stalePriceValuations` and `storeRejectedTrades`.
+5. Select a token and wait for fresh market and risk observations. EMA/RSI remain unavailable until 50 distinct price snapshots exist. A `WATCHLIST — RISK UNVERIFIED` result is not a buy signal; only `BUY SETUP` meets the current paper-entry gates.
+6. Confirm live alert updates and paper-trade records in the dashboard. Paper entries are simulations only.
+
+Do not enable or infer live execution from these checks: this version has no transaction signing or real-money order execution. Codespace runtime verification must be performed in the running Codespace; GitHub Actions tests cannot verify external provider credentials or live websocket compatibility.
