@@ -67,3 +67,15 @@ test('surfaces a technical watchlist candidate but never a BUY when wallet risk 
   assert.equal(result.tradeDecision.automaticTrading, false);
   assert.match(result.tradeDecision.reasons.join(' '), /do not treat this as a BUY signal/);
 });
+
+test('RSI uses Wilder smoothing across the complete observation series', () => {
+  const alternating = Array.from({ length: 15 }, (_, i) => i % 2 === 0 ? 1 : 2);
+  alternating.push(2);
+  const value = calculateRsi(alternating, 14);
+  assert.ok(Math.abs(value - 53.5714285714) < 0.0001);
+});
+test('RSI handles flat prices and rejects invalid periods or values', () => {
+  assert.equal(calculateRsi(Array(20).fill(1), 14), 50);
+  assert.equal(calculateRsi(Array(20).fill(1), 0), null);
+  assert.equal(calculateRsi([1, 2, NaN, 4], 2), null);
+});
