@@ -109,3 +109,19 @@ test('discovers currently open paper positions independently of recent mint acti
   assert.match(query.sql, /payload->>'status' = 'paper entry opened'/);
   assert.equal(query.args[0], 1000);
 });
+
+test('loads the latest paper-trade state independently of mixed market history', async () => {
+  const calls = [];
+  const pool = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.includes("kind = 'paper_trade'")) return { rows: [{ kind: 'paper_trade', observed_at: new Date(2000), payload: { mint: 'mint-a', status: 'paper entry opened' } }] };
+    return { rows: [] };
+  } };
+  const store = createPressurePersistence({ connectionString: 'postgres://test', pool });
+  await store.initialize();
+  const row = await store.latestPaperTrade('mint-a');
+  assert.equal(row.payload.status, 'paper entry opened');
+  const query = calls.find(item => item.sql.includes("kind = 'paper_trade'"));
+  assert.match(query.sql, /ORDER BY observed_at DESC, id DESC LIMIT 1/);
+  assert.equal(query.args[0], 'mint-a');
+});
