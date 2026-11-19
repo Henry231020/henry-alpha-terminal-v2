@@ -69,3 +69,12 @@ test('holder-only risk updates preserve liquidity and fail closed on malformed c
   assert.equal(risk.holderConcentrationPct, null);
   assert.equal(risk.walletRisk, 'unknown');
 });
+
+test('cached provider quotes cannot inflate price-history observations', () => {
+  const now = 1000000;
+  const store = new PressureStore({ clock: () => now });
+  assert.equal(store.recordSnapshot('mint', { timestamp: now - 1000, priceUsd: 1 }), true);
+  assert.equal(store.recordSnapshot('mint', { timestamp: now - 1000, priceUsd: 1 }), false);
+  assert.equal(store.recordSnapshot('mint', { timestamp: now, priceUsd: 1.1 }), true);
+  assert.equal(store.getStats().snapshotCount, 2);
+});
