@@ -562,7 +562,8 @@ const server = http.createServer(async (req, res) => {
     const holderConcentrationPct = risk.status === 'observed'
       ? risk.top10ConcentrationPct
       : current.metrics?.holderConcentrationPct ?? null;
-    const checkedAt = Date.now();
+    const riskObservedAt = Number(rugcheck.checkedAt);
+    const checkedAt = rugcheck.status === 'observed' && Number.isFinite(riskObservedAt) ? Math.min(Date.now(), riskObservedAt) : Date.now();
     pressureStore.updateHolderRisk(mint, {
       holderConcentrationPct,
       walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
