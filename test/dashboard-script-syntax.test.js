@@ -33,14 +33,12 @@ test('wallet coverage is shown as unverified rather than zero when evidence is m
   assert.doesNotMatch(html, /number\(wi\.uniqueBuyers\|\|0\)/);
 });
 
-test('live feed diagnostics show trades rejected for stale SOL/USD quotes', () => {
-  assert.match(html, /id="feedStaleValuations"/);
-  assert.match(html, /fd\.stalePriceValuations/);
-});
-
-test('live feed diagnostics display SOL/USD quote freshness and retry timing', () => {
-  assert.match(html, /status\.solUsdQuoteAgeMs/);
-  assert.match(html, /status\.solUsdRetryAfter/);
+test('live feed diagnostics display GeckoTerminal stale/duplicate counts and provider errors', () => {
+  assert.match(html, /id="feedPriceUnavailable"/);
+  assert.match(html, /gecko\.duplicateOrStale/);
+  assert.match(html, /gecko\.errors/);
+  assert.match(html, /gecko\.lastTradeAt/);
+  assert.match(html, /gecko\.lastCallAt/);
 });
 
 test('selected-token decision and risk gates refresh immediately after risk verification', () => {
