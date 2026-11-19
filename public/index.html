@@ -79,6 +79,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
       <div class="detail-stat"><div class="label">VALID TRADE MESSAGES</div><div class="value" id="feedValidTrades">—</div></div>
       <div class="detail-stat"><div class="label">TRADES RECORDED</div><div class="value" id="feedRecordedTrades">—</div></div>
       <div class="detail-stat"><div class="label">PRICE UNAVAILABLE</div><div class="value" id="feedPriceUnavailable">—</div></div>
+      <div class="detail-stat"><div class="label">STALE USD QUOTES REJECTED</div><div class="value" id="feedStaleValuations">—</div></div>
       <div class="detail-stat"><div class="label">STORE REJECTIONS</div><div class="value" id="feedStoreRejected">—</div></div>
       <div class="detail-stat"><div class="label">REJECTED TRADE CANDIDATES</div><div class="value" id="feedRejectedTrades">—</div></div>
       <div class="detail-stat"><div class="label">MALFORMED JSON</div><div class="value" id="feedMalformed">—</div></div>
@@ -361,6 +362,7 @@ async function refreshAll(){
     $('feedValidTrades').textContent=number(fd.validTradeMessages);
     $('feedRecordedTrades').textContent=number(fd.recordedTrades);
     $('feedPriceUnavailable').textContent=number(fd.priceUnavailable);
+    $('feedStaleValuations').textContent=number(fd.stalePriceValuations);
     $('feedStoreRejected').textContent=number(fd.storeRejectedTrades);
     $('feedRejectedTrades').textContent=number(fd.rejectedTradeCandidates);
     $('feedMalformed').textContent=number(fd.malformedJsonMessages);
