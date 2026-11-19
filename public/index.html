@@ -192,7 +192,7 @@ function renderTokens(){
   const list=filteredTokens();
   $('listInfo').textContent=list.length+' shown';
   if(!list.length){
-    $('tokenRows').innerHTML='<tr><td colspan="6" class="empty">No tokens found yet. Launch/migration events populate this list. Try Refresh.</td></tr>';
+    $('tokenRows').innerHTML='<tr><td colspan="7" class="empty">No tokens found yet. Launch/migration events populate this list. Try Refresh.</td></tr>';
     return;
   }
   $('tokenRows').innerHTML=list.map(t=>{
