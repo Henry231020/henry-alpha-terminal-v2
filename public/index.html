@@ -163,7 +163,7 @@ function riskMarkup(result){
   return '<h4 style="margin:12px 0 6px">TOKEN SECURITY & HOLDER RISK</h4>'+
     '<div>Helius top-10 owner concentration: <strong>'+(holderObserved?escapeHtml(Number(h.top10ConcentrationPct).toFixed(2)+'%'):'UNVERIFIED')+'</strong> · Holders: '+escapeHtml(holderObserved?number(h.holderCount):'Unknown')+'</div>'+
     '<div>RugCheck classification: <strong>'+escapeHtml(walletRisk.toUpperCase())+'</strong> · Score: '+escapeHtml(r.scoreNormalised==null?'Unknown':r.scoreNormalised+'/100')+' · Detected insider wallets: '+escapeHtml(r.graphInsidersDetected==null?'Unknown':number(r.graphInsidersDetected))+'</div>'+
-    '<div class="muted">'+escapeHtml(r.reason||'RugCheck report unavailable; wallet-risk gate remains closed.')+'</div>'+
+    '<div class="muted">'+escapeHtml(r.reason||'RugCheck report unavailable; wallet-risk gate remains closed.')+' Checked: '+escapeHtml(dateText(result?.checkedAt))+'</div>'+
     (r.dangerRisks&&r.dangerRisks.length?'<div class="red">Danger findings: '+r.dangerRisks.map(x=>escapeHtml(x.name)).join(', ')+'</div>':'')+
     '<div class="muted">Third-party risk reports are snapshots, not guarantees. Missing data never passes the BUY risk gate.</div>';
 }
