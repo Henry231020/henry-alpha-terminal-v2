@@ -107,3 +107,27 @@ test('pressure store bounds retained token state during long-running token churn
   assert.equal(store.byMint.has('mint-0'), false);
   assert.equal(store.byMint.has('mint-' + MAX_TRACKED_MINTS), true);
 });
+
+
+test('liquidity evidence expires independently after two minutes',()=>{
+  let now=4000000;
+  const store=new PressureStore({clock:()=>now});
+  store.updateLiquidity('mint',25000,now);
+  store.updateHolderRisk('mint',{holderConcentrationPct:12,walletRisk:'low',checkedAt:now});
+  let analysis=store.analyse('mint');
+  assert.equal(analysis.gates.liquidityOk,true);
+  now+=2*60*1000+1;
+  analysis=store.analyse('mint');
+  assert.equal(analysis.gates.liquidityOk,false);
+  assert.match(analysis.reasons.join(' '),/Liquidity missing/);
+  assert.equal(analysis.gates.walletRisk,'low');
+});
+test('old or future-dated liquidity observations cannot pass the freshness gate',()=>{
+  let now=5000000;
+  const store=new PressureStore({clock:()=>now});
+  store.updateLiquidity('mint',30000,now-2*60*1000-1);
+  store.updateHolderRisk('mint',{holderConcentrationPct:10,walletRisk:'low',checkedAt:now});
+  assert.equal(store.analyse('mint').gates.liquidityOk,false);
+  store.updateLiquidity('mint',30000,now+6000);
+  assert.equal(store.analyse('mint').gates.liquidityOk,false);
+});
