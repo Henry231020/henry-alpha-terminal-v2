@@ -296,14 +296,14 @@ async function selectToken(mint){
         const m = a.metrics || {};
         const d = a.tradeDecision || {};
         const ind = a.indicators || {};
-        panel.innerHTML = '<strong>TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>' +
+        panel.innerHTML = '<strong id="decisionAction">TRADE DECISION: '+escapeHtml(d.action||'WAIT')+'</strong><br>' +
           '<span class="muted">EMA 9: '+escapeHtml(money(ind.ema9))+' · EMA 20: '+escapeHtml(money(ind.ema20))+' · EMA 50: '+escapeHtml(money(ind.ema50))+' · RSI 14: '+escapeHtml(ind.rsi14==null?'—':ind.rsi14)+'</span><br>' +
           'Price history: '+escapeHtml(number(ind.observations||0))+' observations · '+(ind.ready?'indicators ready':'building indicator history')+' · '+(ind.priceFresh?'price fresh':'price stale')+'<br>' +
           '<strong>Pressure:</strong> '+escapeHtml(a.signal||'WAIT')+' · Buy '+escapeHtml(money(m.buyUsd))+' / Sell '+escapeHtml(money(m.sellUsd))+'<br>' +
           'Imbalance: '+escapeHtml(m.imbalancePct==null?'—':m.imbalancePct+'%')+' · Acceleration: '+escapeHtml(m.acceleration==null?'—':m.acceleration+'x')+'<br>' +
-          '<strong>Entry/exit reasoning:</strong> '+escapeHtml((d.reasons||[]).join(' '))+'<br>' +
+          '<strong>Entry/exit reasoning:</strong> <span id="decisionReasons">'+escapeHtml((d.reasons||[]).join(' '))+'</span><br>' +
           (a.tradePlan ? '<strong>Illustrative trade plan:</strong> Entry '+escapeHtml(money(a.tradePlan.referenceEntryPrice))+' · Stop '+escapeHtml(money(a.tradePlan.stopLossPrice))+' ('+escapeHtml(a.tradePlan.stopLossPct)+'%) · TP1 '+escapeHtml(money(a.tradePlan.takeProfit1Price))+' (+50%) · TP2 '+escapeHtml(money(a.tradePlan.takeProfit2Price))+' (+100%)<br><span class="muted">'+escapeHtml(a.tradePlan.note)+'</span><br>' : '') +
-          '<strong>Risk gates:</strong> liquidity '+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+' · concentration '+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+' · wallet '+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'<br>' +
+          '<strong>Risk gates:</strong> liquidity <span id="riskLiquidity">'+(a.gates&&a.gates.liquidityOk?'PASS':'NOT PASSED')+'</span> · concentration <span id="riskConcentration">'+(a.gates&&a.gates.concentrationOk?'PASS':'NOT PASSED')+'</span> · wallet <span id="riskWallet">'+escapeHtml(a.gates&&a.gates.walletRisk||'unknown')+'</span><br>' +
           '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
         const wi = pressure.walletIntelligence || {};
         panel.innerHTML += '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>' +
@@ -330,6 +330,18 @@ async function selectToken(mint){
       delete state.riskRetryAtByMint[mint];
       if(state.selectedMint!==mint)return;
       state.riskByMint[mint]=riskResult;
+      const updatedAnalysis = riskResult.analysis || {};
+      const updatedDecision = updatedAnalysis.tradeDecision || {};
+      const decisionAction = $('decisionAction');
+      const decisionReasons = $('decisionReasons');
+      const riskLiquidity = $('riskLiquidity');
+      const riskConcentration = $('riskConcentration');
+      const riskWallet = $('riskWallet');
+      if(decisionAction) decisionAction.textContent='TRADE DECISION: '+(updatedDecision.action||'WAIT');
+      if(decisionReasons) decisionReasons.textContent=(updatedDecision.reasons||[]).join(' ');
+      if(riskLiquidity) riskLiquidity.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.liquidityOk?'PASS':'NOT PASSED';
+      if(riskConcentration) riskConcentration.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.concentrationOk?'PASS':'NOT PASSED';
+      if(riskWallet) riskWallet.textContent=updatedAnalysis.gates&&updatedAnalysis.gates.walletRisk||'unknown';
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
