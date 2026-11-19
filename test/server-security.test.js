@@ -12,4 +12,6 @@ test('dashboard API does not expose wildcard cross-origin access', () => {
   assert.match(server, /Referrer-Policy/);
   assert.match(server, /X-Frame-Options/);
   assert.match(server, /Permissions-Policy/);
+  assert.match(server, /new URL\(origin\)\.host !== req\.headers\.host/);
+  assert.match(server, /Origin not allowed/);
 });
