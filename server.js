@@ -31,6 +31,8 @@ let tradeSubscriptions = null;
 let solUsdPrice = null;
 let solUsdCheckedAt = 0;
 let solUsdRequest = null;
+let solUsdRetryAfter = 0;
+const SOL_USD_FAILURE_COOLDOWN_MS = 15000;
 let tradeFeedStatus = 'waiting for API key';
 const alertThrottle = new AlertThrottle({ cooldownMs: 30000, retentionMs: 10 * 60 * 1000, maxEntries: 5000 });
 const riskRequestGuard = new RiskRequestGuard({ cooldownMs: 30000, maxConcurrent: 3 });
@@ -222,17 +224,25 @@ function addEvent(payload) {
 }
 
 async function getSolUsdPrice() {
-  if (solUsdPrice && Date.now() - solUsdCheckedAt < 60000) return { price: solUsdPrice, checkedAt: solUsdCheckedAt };
+  const now = Date.now();
+  if (solUsdPrice && now - solUsdCheckedAt < 60000) return { price: solUsdPrice, checkedAt: solUsdCheckedAt };
   if (solUsdRequest) return solUsdRequest;
+  if (now < solUsdRetryAfter) return null;
   solUsdRequest = (async () => {
     try {
       const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const retryHeader = Number(response.headers && response.headers.get && response.headers.get('retry-after'));
+        const retryMs = Number.isFinite(retryHeader) && retryHeader > 0 ? Math.min(retryHeader * 1000, 5 * 60 * 1000) : SOL_USD_FAILURE_COOLDOWN_MS;
+        solUsdRetryAfter = Date.now() + retryMs;
+        return null;
+      }
       const body = await response.json();
       const price = safeNumber(body?.solana?.usd);
-      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); return { price, checkedAt: solUsdCheckedAt }; }
+      if (price && price > 0) { solUsdPrice = price; solUsdCheckedAt = Date.now(); solUsdRetryAfter = 0; return { price, checkedAt: solUsdCheckedAt }; }
+      solUsdRetryAfter = Date.now() + SOL_USD_FAILURE_COOLDOWN_MS;
       return null;
-    } catch (_) { return null; }
+    } catch (_) { solUsdRetryAfter = Date.now() + SOL_USD_FAILURE_COOLDOWN_MS; return null; }
   })();
   try { return await solUsdRequest; } finally { solUsdRequest = null; }
 }
@@ -566,6 +576,9 @@ const server = http.createServer(async (req, res) => {
       tradeLearning: tradeLearning.summary(10),
       tradeSubscriptions: tradeSubscriptions ? tradeSubscriptions.stats() : { subscribedMints: 0, maxSubscriptions: 100 },
       solUsdPrice,
+      solUsdQuoteAt: solUsdCheckedAt ? new Date(solUsdCheckedAt).toISOString() : null,
+      solUsdQuoteAgeMs: solUsdCheckedAt ? Math.max(0, Date.now() - solUsdCheckedAt) : null,
+      solUsdRetryAfter: solUsdRetryAfter > Date.now() ? new Date(solUsdRetryAfter).toISOString() : null,
       pressureEngine: 'live trade ingestion is conditional on PumpPortal API key; BUY signals remain risk-gated',
       automaticTrading: false,
       persistenceMode: persistence.status().mode
