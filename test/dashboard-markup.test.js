@@ -7,7 +7,7 @@ const path = require('node:path');
 
 test('dashboard element IDs are unique', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-  const ids = [...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(match => match[1]);
+  const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
   const seen = new Set();
   const duplicates = new Set();
 
