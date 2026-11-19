@@ -370,7 +370,7 @@ async function refreshOneToken(mint) {
 
     tokens.set(mint, merged);
     if (Number.isFinite(merged.priceUsd) && merged.priceUsd > 0) {
-      const snapshot = { timestamp: Date.now(), priceUsd: merged.priceUsd };
+      const snapshot = { timestamp: Date.parse(merged.checkedAt || '') || Date.now(), priceUsd: merged.priceUsd };
       pressureStore.recordSnapshot(mint, snapshot);
       persistence.save(mint, 'snapshot', snapshot.timestamp, snapshot).catch(() => {});
     }
