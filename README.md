@@ -88,4 +88,4 @@ Do not enable or infer live execution from these checks: this version has no tra
 
 ### DexScreener price orientation
 
-Market data is accepted only from a pair whose base-token or quote-token address matches the requested mint. When the mint is the quote token, its USD price and 24-hour percentage move are inverted from the base-token values using the pair's native price ratio. Quote-side market-cap values are left unavailable rather than incorrectly assigning the base token's market cap to the requested mint. Pools without a valid target-token USD price are skipped.
+Market data is accepted only from a pair whose base-token or quote-token address matches the requested mint. When the mint is the quote token, its USD price and 24-hour percentage move are inverted from the base-token values using the pair's native price ratio. Quote-side buy/sell counts are reversed to match the requested mint's perspective, and quote-side market-cap values are left unavailable rather than incorrectly assigning the base token's market cap to the requested mint. Pools without a valid target-token USD price are skipped.
