@@ -68,6 +68,17 @@ test('inverts the quote-token USD price when the requested mint is the quote sid
   assert.equal(market.baseSymbol, 'TGT');
 });
 
+test('keeps explicitly missing transaction and price-change metrics unknown', () => {
+  const market = normalisePairForMint({
+    ...base,
+    txns: { h24: { buys: null, sells: undefined } },
+    priceChange: { h24: null }
+  }, mint);
+  assert.equal(market.buys24h, null);
+  assert.equal(market.sells24h, null);
+  assert.equal(market.priceChange24h, null);
+});
+
 test('rejects unrelated pairs and quote-side pairs without a usable conversion ratio', () => {
   assert.equal(normalisePairForMint({ ...base, baseToken: { address: 'other' } }, mint), null);
   const pair = { ...base, baseToken: { address: 'other' }, quoteToken: { address: mint }, priceNative: '0' };
