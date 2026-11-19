@@ -284,11 +284,14 @@ async function selectToken(mint){
       }
     } catch (_) {}
     try {
+      state.riskLoadingByMint[mint]=true;
       const riskResult = await api('/api/risk/'+encodeURIComponent(mint));
       state.riskByMint[mint]=riskResult;
+      state.riskLoadingByMint[mint]=false;
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
+      state.riskLoadingByMint[mint]=false;
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(null);
     }
