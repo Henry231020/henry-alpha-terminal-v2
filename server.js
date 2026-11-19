@@ -232,7 +232,7 @@ async function getSolUsdPrice() {
   try { return await solUsdRequest; } finally { solUsdRequest = null; }
 }
 function subscribeMintTrades(mint) {
-  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribe(mint);
+  if (tradeSubscriptions && tradeFeedStatus === 'connected') tradeSubscriptions.subscribeLatest(mint);
 }
 
 const pendingTrades = [];
@@ -694,6 +694,7 @@ const server = http.createServer(async (req, res) => {
   if (match) {
     const mint = decodeURIComponent(match[1]);
     const token = tokens.get(mint);
+    subscribeMintTrades(mint);
 
     if (!token) {
       return sendJson(res, 404, {
