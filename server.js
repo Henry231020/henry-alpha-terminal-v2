@@ -407,7 +407,9 @@ async function refreshMarketData() {
   refreshInProgress = true;
 
   try {
-    const list = [...tokens.keys()].slice(0, 20);
+    // Prioritise the newest discovered tokens: early entry decisions are time-sensitive,
+    // and a fixed first-20 slice would permanently starve later discoveries of price history.
+    const list = [...tokens.keys()].slice(-20).reverse();
 
     for (const mint of list) {
       await refreshOneToken(mint);
