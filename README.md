@@ -59,3 +59,5 @@ SOL/USD quote requests also use a failure cooldown (15 seconds by default, or a 
 Token metadata retrieval accepts HTTPS URLs only, rejects credentials, non-standard ports, localhost/internal names and literal private/reserved IP destinations, and refuses redirects. This reduces exposure to malicious token-supplied metadata URLs; arbitrary DNS hostnames are still subject to the host's network-resolution policy.
 
 Pressure-store and wallet-intelligence maps now refresh active records before eviction, using least-recently-used retention so frequently observed tokens and wallets are less likely to be discarded during token churn.
+
+API `limit` query parameters are parsed as bounded safe integers; missing or malformed values use endpoint defaults instead of propagating `NaN` into persistence queries or result slicing.
