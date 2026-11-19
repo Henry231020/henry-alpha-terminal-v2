@@ -569,6 +569,7 @@ const server = http.createServer(async (req, res) => {
     const savedRisk = {
       holderConcentrationPct,
       walletRisk: rugcheck.status === 'observed' ? rugcheck.walletRisk : 'unknown',
+      checkedAt: Date.now(),
       helius: risk,
       rugcheck
     };
