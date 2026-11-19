@@ -50,12 +50,15 @@ test('mismatched report mint is rejected', async () => {
   assert.equal(result.walletRisk, 'unknown');
 });
 
-test('caches successful reports to limit repeated external requests', async () => {
-  let calls = 0;
-  const client = createRugCheckRiskClient({ fetchImpl: async () => { calls++; return { ok: true, json: async () => report() }; } });
+test('caches successful reports and preserves their original observation time', async () => {
+  let calls = 0, now = 1000;
+  const client = createRugCheckRiskClient({ clock: () => now, fetchImpl: async () => { calls++; return { ok: true, json: async () => report() }; } });
   const mint = 'So11111111111111111111111111111111111111112';
-  await client.getTokenRisk(mint);
+  const first = await client.getTokenRisk(mint);
+  now = 2000;
   const cached = await client.getTokenRisk(mint);
   assert.equal(calls, 1);
+  assert.equal(first.checkedAt, 1000);
   assert.equal(cached.cached, true);
+  assert.equal(cached.checkedAt, 1000);
 });
