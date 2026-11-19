@@ -292,6 +292,7 @@ async function selectToken(mint){
       if(panel) panel.innerHTML += riskMarkup(riskResult);
     } catch (_) {
       state.riskLoadingByMint[mint]=false;
+      state.riskByMint[mint]={checkedAt:new Date().toISOString(),risk:{status:'unknown'},rugcheck:{status:'unknown'}};
       const panel = $('pressurePanel');
       if(panel) panel.innerHTML += riskMarkup(null);
     }
@@ -346,7 +347,7 @@ const exitRows=Object.entries(learning.exitStats||{}).sort((a,b)=>b[1].trades-a[
           api('/api/risk/'+encodeURIComponent(current.mint)).then(riskResult=>{
             state.riskByMint[current.mint]=riskResult;
             const panel=$('pressurePanel');if(panel&&state.selectedMint===current.mint)panel.innerHTML+=riskMarkup(riskResult);
-          }).catch(()=>{}).finally(()=>{state.riskLoadingByMint[current.mint]=false;});
+          }).catch(()=>{state.riskByMint[current.mint]={checkedAt:new Date().toISOString(),risk:{status:'unknown'},rugcheck:{status:'unknown'}};}).finally(()=>{state.riskLoadingByMint[current.mint]=false;});
         }
         // Keep the selected token's live decision panel visible after the 15-second dashboard refresh.
         api('/api/token/'+encodeURIComponent(state.selectedMint)).then(tokenResult=>{
