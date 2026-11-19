@@ -23,3 +23,19 @@ test('does not count future-dated trades in a coordinated burst',()=>{
   for(let i=0;i<5;i++)x.recordTrade('mint',{wallet:'future-'+i,side:'buy',timestamp:now+4000,usdValue:5},first);
   assert.equal(x.analyse('mint',first).coordinatedBurst,false);
 });
+
+test('repeat early buyers require early activity on at least two tokens', () => {
+  let now=7000000;const x=new WalletIntelligence({clock:()=>now});
+  const firstA=new Date(now-10000).toISOString(),firstB=new Date(now-10000).toISOString();
+  x.recordTrade('mint-a',{wallet:'repeat-wallet',side:'buy',timestamp:now-9000,usdValue:5},firstA);
+  x.recordTrade('mint-b',{wallet:'repeat-wallet',side:'buy',timestamp:now-8000,usdValue:5},firstB);
+  assert.equal(x.analyse('mint-a',firstA).repeatEarlyBuyers,1);
+  assert.equal(x.analyse('mint-b',firstB).repeatEarlyBuyers,1);
+});
+test('a wallet that trades a second token late is not counted as a repeat early buyer', () => {
+  let now=8000000;const x=new WalletIntelligence({clock:()=>now});
+  const firstA=new Date(now-10000).toISOString(),firstB=new Date(now-600000).toISOString();
+  x.recordTrade('mint-a',{wallet:'late-wallet',side:'buy',timestamp:now-9000,usdValue:5},firstA);
+  x.recordTrade('mint-b',{wallet:'late-wallet',side:'buy',timestamp:now-1000,usdValue:5},firstB);
+  assert.equal(x.analyse('mint-a',firstA).repeatEarlyBuyers,0);
+});
