@@ -23,6 +23,24 @@ test('selects the highest-liquidity pair that actually contains the requested mi
   assert.equal(selectPairForMint([unrelated, smaller, base], mint).pairAddress, 'pool-base');
 });
 
+test('skips a higher-liquidity pair with an unusable quote-side price', () => {
+  const unusable = {
+    ...base,
+    baseToken: { address: 'other' },
+    quoteToken: { address: mint },
+    priceNative: '0',
+    liquidity: { usd: 100000 }
+  };
+  const usable = {
+    ...base,
+    baseToken: { address: 'other' },
+    quoteToken: { address: mint },
+    priceNative: '2',
+    liquidity: { usd: 50000 }
+  };
+  assert.equal(selectPairForMint([unusable, usable], mint), usable);
+});
+
 test('uses the requested base-token price and market cap', () => {
   const market = normalisePairForMint(base, mint);
   assert.equal(market.priceUsd, 2);
