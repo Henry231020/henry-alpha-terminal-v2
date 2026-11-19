@@ -16,6 +16,7 @@ const { WalletIntelligence } = require('./lib/wallet-intelligence');
 const { TradeLearningEngine } = require('./lib/trade-learning');
 const { AlertStore } = require('./lib/alert-store');
 const { AlertThrottle } = require('./lib/alert-throttle');
+const { newestTokenMints } = require('./lib/token-priority');
 const heliusRisk = createHeliusRiskClient();
 const rugCheckRisk = createRugCheckRiskClient();
 const persistence = createPressurePersistence();
@@ -416,9 +417,9 @@ async function refreshMarketData() {
   refreshInProgress = true;
 
   try {
-    // Prioritise the newest discovered tokens: early entry decisions are time-sensitive,
-    // and a fixed first-20 slice would permanently starve later discoveries of price history.
-    const list = [...tokens.keys()].slice(-20).reverse();
+    // Prioritise first discovery time, not last activity: busy older tokens must not
+    // keep newer launches out of the market-price warm-up window.
+    const list = newestTokenMints([...tokens.values()], 20);
 
     for (const mint of list) {
       await refreshOneToken(mint);
@@ -459,7 +460,9 @@ function connectPumpPortal() {
     tradeSubscriptions = new TradeSubscriptionManager({ socket, maxSubscriptions: 100 });
     tradeFeedStatus = process.env.PUMPPORTAL_API_KEY ? 'connected' : 'disabled: API key required';
     if (process.env.PUMPPORTAL_API_KEY) {
-      for (const mint of [...tokens.keys()].reverse()) tradeSubscriptions.subscribeLatest(mint);
+      // subscribeLatest evicts the oldest inserted item at capacity; feed older
+      // discoveries first so the final 100 subscriptions are the newest tokens.
+      for (const mint of newestTokenMints([...tokens.values()], 100).reverse()) tradeSubscriptions.subscribeLatest(mint);
     }
 
     console.log('PumpPortal connected; subscribed to launches and migrations');
