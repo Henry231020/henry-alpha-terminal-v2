@@ -254,7 +254,7 @@ async function selectToken(mint){
           '<span class="muted">Decision support only · no order execution · automatic trading disabled</span>';
         const wi = pressure.walletIntelligence || {};
         panel.innerHTML += '<h4 style="margin:12px 0 6px">EARLY BUYERS & WALLET ACTIVITY</h4>' +
-          'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers (first 5 min): '+escapeHtml(number(wi.earlyBuyers||0))+' · Repeat early buyers: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>' +
+          'Unique observed buyers: '+escapeHtml(number(wi.uniqueBuyers||0))+' · Early buyers (first 5 min): '+escapeHtml(number(wi.earlyBuyers||0))+' · Early buyers seen across multiple tokens: '+escapeHtml(number(wi.repeatEarlyBuyers||0))+'<br>' +
           (wi.coordinatedBurst ? '<strong class="red">Review: '+escapeHtml(number(wi.burstBuyerCount||0))+' distinct wallets bought within 10 seconds.</strong><br>' : 'No qualifying 5-wallet buy burst observed in the latest 10 seconds.<br>') +
           '<span class="muted">'+escapeHtml(wi.coverage||'Wallet-labelled trade data not yet available.')+' This is a review flag, not proof of manipulation.</span>' +
           (wi.wallets&&wi.wallets.length ? '<div class="muted" style="margin-top:6px">First observed early buyers: '+wi.wallets.slice(0,5).map(x=>escapeHtml(shortMint(x.wallet))+' ('+escapeHtml(number(x.tokensSeen))+' tokens seen)').join(' · ')+'</div>' : '');
