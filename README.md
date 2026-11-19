@@ -5,7 +5,7 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 ## What it does
 
 - Discovers new PumpPortal token and migration events.
-- Subscribes to live token trades when `PUMPPORTAL_API_KEY` is configured, rotating the 100 subscription slots toward newly discovered or selected tokens.
+- Uses the public GeckoTerminal API to poll recent pool trades (buy/sell, USD volume and wallet) for up to 8 pools per minute; PumpPortal is used only for free launch/migration discovery.
 - Retrieves market snapshots from DexScreener with caching and rate-limit backoff.
 - Tracks observed buy/sell pressure, trade acceleration, liquidity and holder concentration, with urgent sell-pressure warnings that do not wait for EMA warm-up.
 - Calculates EMA 9/20/50 and standard Wilder-smoothed RSI 14 from distinct, timestamped price observations.
@@ -24,14 +24,13 @@ Cloud-hosted, on-demand Solana token discovery and BUY/SELL decision-support das
 - Holder concentration and third-party risk reports are snapshots; they do not prove that a token is safe or sellable.
 - EMA/RSI require 50 distinct price observations. Cached duplicate quotes are not counted as new observations.
 - Paper-learning stop/take-profit baselines are currently -15%/+50%; these are experimental simulation thresholds, not a user-approved live trading strategy.
-- PumpPortal trade monitoring requires its API key. Helius holder scanning requires its API key. RugCheck is attempted without a key; an optional key may be configured for authenticated access and higher limits.
+- GeckoTerminal public trade data requires no API key and is rate-limited to approximately 10 calls/minute with data cached for up to one minute; the app deliberately stays below that limit. PumpPortal is used only for free launch/migration discovery. Helius holder scanning requires its own API key. RugCheck is attempted without a key; an optional key may be configured for authenticated access and higher limits.
 - Codespaces can stop when idle. This project is intended for on-demand sessions, not guaranteed 24/7 monitoring.
 
 ## Configuration
 
 Copy the variable names from `.env.example` into the Codespace secrets/environment. Never commit API keys, database URLs or wallet secrets.
 
-- `PUMPPORTAL_API_KEY` — enables live token-trade subscriptions.
 - `HELIUS_API_KEY` — enables complete holder-account scanning.
 - `RUGCHECK_API_KEY` — optional authenticated RugCheck access.
 - `DATABASE_URL` — optional PostgreSQL persistence.
