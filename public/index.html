@@ -116,8 +116,8 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
       <div class="panel-head"><h2>DISCOVERED SOLANA TOKENS</h2><span class="muted" id="listInfo">Waiting for data</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>TOKEN</th><th>PRICE USD</th><th>MARKET CAP</th><th>LIQUIDITY</th><th>24H VOLUME</th><th>24H CHANGE</th></tr></thead>
-          <tbody id="tokenRows"><tr><td colspan="6" class="empty">Connecting to token feed…</td></tr></tbody>
+          <thead><tr><th>TOKEN</th><th>PRICE USD</th><th>MARKET CAP</th><th>LIQUIDITY</th><th>24H VOLUME</th><th>24H CHANGE</th><th>BUY / SELL DECISION</th></tr></thead>
+          <tbody id="tokenRows"><tr><td colspan="7" class="empty">Connecting to token feed…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -138,7 +138,7 @@ footer{padding:22px;text-align:center;color:var(--muted);font-size:12px}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const state={tokens:[],events:[],selectedMint:null,ws:null,retry:2000,connected:false};
+const state={tokens:[],events:[],pressureByMint:{},selectedMint:null,ws:null,retry:2000,connected:false};
 const money=n=>{
   if(n===null||n===undefined||!Number.isFinite(Number(n)))return '—';
   n=Number(n);
@@ -191,7 +191,7 @@ function renderTokens(){
     const img='<span class="token-avatar">'+initials+'</span>'+(t.image?'<img src="'+escapeHtml(t.image)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'');
     return '<tr data-mint="'+escapeHtml(t.mint)+'" class="'+(state.selectedMint===t.mint?'selected':'')+'">'+
       '<td><div class="token">'+img+'<div><div class="token-name">'+escapeHtml(t.name||'Unknown token')+'</div><div class="muted">'+escapeHtml(t.symbol||shortMint(t.mint))+'</div></div></div></td>'+
-      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td></tr>';
+      '<td>'+money(t.priceUsd)+'</td><td>'+money(t.marketCapUsd)+'</td><td>'+money(t.liquidityUsd)+'</td><td>'+money(t.volume24h)+'</td><td class="'+changeClass+'">'+changeText+'</td><td><span class="pill '+(String(state.pressureByMint[t.mint]?.action||'').includes('SELL')?'red':String(state.pressureByMint[t.mint]?.action||'').includes('BUY SETUP')?'green':'')+'">'+escapeHtml(state.pressureByMint[t.mint]?.action||'WAIT')+'</span></td></tr>';
   }).join('');
   $('tokenRows').querySelectorAll('tr[data-mint]').forEach(row=>row.addEventListener('click',()=>selectToken(row.dataset.mint)));
 }
@@ -294,11 +294,12 @@ async function selectToken(mint){
 }
 async function refreshAll(){
   try{
-    const [status,list,events,learning]=await Promise.all([
-      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8')
+    const [status,list,events,learning,pressure]=await Promise.all([
+      api('/api/status'),api('/api/tokens?sort='+encodeURIComponent($('sort').value)+'&limit=200'),api('/api/events'),api('/api/learning?limit=8'),api('/api/pressure?limit=500')
     ]);
     state.tokens=list.tokens||[];
     state.events=events||[];
+    state.pressureByMint=Object.fromEntries((pressure.pressure||[]).map(item=>[item.mint,item.analysis?.tradeDecision||{action:'WAIT'}]));
     $('pumpStatus').textContent=status.pumpPortal||'—';
     $('tradeFeedState').textContent=status.tradeFeed||'—';
     const fd=status.feedDiagnostics||{};
