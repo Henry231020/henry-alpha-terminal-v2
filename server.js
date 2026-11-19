@@ -574,7 +574,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/learning') {
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
-    return sendJson(res, 200, tradeLearning.summary(limit));
+    return sendJson(res, 200, { ...tradeLearning.summary(limit), persistence: persistence.status() });
   }
 
   if (url.pathname === '/api/wallet-intelligence') {
